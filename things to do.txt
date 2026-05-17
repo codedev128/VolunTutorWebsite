@@ -1,0 +1,8 @@
+Fix login with google and email verification
+add requests page on to tutor dashboard
+ensure requests sent are shown to tutors
+add functionality to accept or reject requests
+add option to finalise a session after it has been accepted
+blind accessability
+aesthetics
+remove dummy data
