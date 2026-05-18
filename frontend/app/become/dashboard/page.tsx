@@ -388,12 +388,15 @@ function Avatar({ initials, src, size = "md", color = "amber", onClick }: {
 function ProfilePanel({
   isOpen, onClose, initials, profilePic, bio, bioEditing, bioInput,
   matches, totalSessions, onAvatarClick, setBioInput, setBioEditing, saveBio, onSignOut,
+  gmeetUrl, gmeetInput, gmeetEditing, setGmeetInput, setGmeetEditing, saveGmeetUrl,
 }: {
   isOpen: boolean; onClose: () => void; initials: string; profilePic: string | null;
   bio: string; bioEditing: boolean; bioInput: string;
   matches: ActiveMatch[]; totalSessions: number;
   onAvatarClick: () => void; setBioInput: (v: string) => void;
   setBioEditing: (v: boolean) => void; saveBio: () => void; onSignOut: () => void;
+  gmeetUrl: string; gmeetInput: string; gmeetEditing: boolean;
+  setGmeetInput: (v: string) => void; setGmeetEditing: (v: boolean) => void; saveGmeetUrl: () => void;
 }) {
   if (!isOpen) return null;
   const hoursWorked = totalSessions;
@@ -472,6 +475,46 @@ function ProfilePanel({
               <p className="text-sm leading-relaxed text-gray-600">
                 {bio || <span className="italic text-gray-400">No bio yet. Click Edit to add one.</span>}
               </p>
+            )}
+          </div>
+
+          {/* Google Meet Link */}
+          <div className="px-5 py-5 border-b border-gray-100">
+            <div className="mb-2 flex items-center justify-between">
+              <span className="text-xs font-bold uppercase tracking-widest text-amber-600">Google Meet Link</span>
+              {!gmeetEditing && (
+                <button
+                  onClick={() => { setGmeetInput(gmeetUrl); setGmeetEditing(true); }}
+                  className="text-xs font-semibold text-gray-400 hover:text-amber-600 transition"
+                >
+                  {gmeetUrl ? "Edit" : "Add"}
+                </button>
+              )}
+            </div>
+            {gmeetEditing ? (
+              <div className="space-y-2">
+                <input
+                  autoFocus
+                  type="url"
+                  value={gmeetInput}
+                  onChange={(e) => setGmeetInput(e.target.value)}
+                  placeholder="https://meet.google.com/xxx-xxxx-xxx"
+                  className="w-full rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-gray-800 placeholder:text-gray-400 outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-100"
+                />
+                <div className="flex gap-2">
+                  <button onClick={saveGmeetUrl} className="flex-1 rounded-lg bg-amber-500 py-1.5 text-xs font-semibold text-white hover:bg-amber-400 transition">Save</button>
+                  <button onClick={() => setGmeetEditing(false)} className="flex-1 rounded-lg border border-gray-200 py-1.5 text-xs font-semibold text-gray-600 hover:bg-gray-50 transition">Cancel</button>
+                </div>
+              </div>
+            ) : gmeetUrl ? (
+              <div className="flex items-center gap-2 rounded-xl border border-emerald-100 bg-emerald-50 px-3 py-2">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#16a34a" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
+                  <path d="M15 10l4.553-2.669A1 1 0 0121 8.232v7.536a1 1 0 01-1.447.9L15 14"/><rect x="1" y="6" width="14" height="12" rx="2"/>
+                </svg>
+                <span className="text-xs text-emerald-700 font-medium truncate flex-1">{gmeetUrl}</span>
+              </div>
+            ) : (
+              <p className="text-sm italic text-gray-400">No Meet link added. Click Add to set your permanent room.</p>
             )}
           </div>
 
@@ -573,6 +616,10 @@ export default function TutorDashboard() {
   const [bio, setBio] = useState("");
   const [bioEditing, setBioEditing] = useState(false);
   const [bioInput, setBioInput] = useState("");
+  const [gmeetUrl, setGmeetUrl] = useState("");
+  const [gmeetInput, setGmeetInput] = useState("");
+  const [gmeetEditing, setGmeetEditing] = useState(false);
+  const [meetInvites, setMeetInvites] = useState<Record<string, boolean>>({});
   const avatarInputRef = useRef<HTMLInputElement>(null);
   const [dismissedSlots, setDismissedSlots] = useState<Set<string>>(new Set());
   const [messages, setMessages] = useState<Record<string, { from: "tutor" | "student"; body: string }[]>>({
@@ -600,6 +647,8 @@ export default function TutorDashboard() {
       if (savedBio) setBio(savedBio);
       const ds = localStorage.getItem(`vt_tutor_dismissed_slots_${user.id}`);
       if (ds) setDismissedSlots(new Set(JSON.parse(ds)));
+      const gmeet = localStorage.getItem(`vt_tutor_gmeet_${user.id}`);
+      if (gmeet) setGmeetUrl(gmeet);
     } catch { /* ignore */ }
   }, [user]);
 
@@ -802,6 +851,30 @@ export default function TutorDashboard() {
     setBioEditing(false);
   }
 
+  function saveGmeetUrl() {
+    const clean = gmeetInput.trim();
+    setGmeetUrl(clean);
+    try { localStorage.setItem(`vt_tutor_gmeet_${user!.id}`, clean); } catch { /* ignore */ }
+    setGmeetEditing(false);
+  }
+
+  function toggleMeetInvite(match: ActiveMatch) {
+    const isActive = meetInvites[match.id] ?? false;
+    const newActive = !isActive;
+    setMeetInvites((prev) => ({ ...prev, [match.id]: newActive }));
+    try {
+      localStorage.setItem(`vt_meet_invite_${match.id}`, JSON.stringify({
+        active: newActive,
+        tutorId: user!.id,
+        gmeetUrl,
+        updatedAt: new Date().toISOString(),
+      }));
+    } catch { /* ignore */ }
+    if (newActive && gmeetUrl) {
+      window.open(gmeetUrl, "_blank", "noopener,noreferrer");
+    }
+  }
+
   function sendMessage() {
     if (!messageInput.trim() || !activeMatchId) return;
     const newMsg = { from: "tutor" as const, body: messageInput.trim(), sentAt: new Date().toISOString() };
@@ -843,6 +916,12 @@ export default function TutorDashboard() {
         setBioEditing={setBioEditing}
         saveBio={saveBio}
         onSignOut={() => { signOut(); router.push("/"); }}
+        gmeetUrl={gmeetUrl}
+        gmeetInput={gmeetInput}
+        gmeetEditing={gmeetEditing}
+        setGmeetInput={setGmeetInput}
+        setGmeetEditing={setGmeetEditing}
+        saveGmeetUrl={saveGmeetUrl}
       />
       {/* ── Navbar ── */}
       <nav className="sticky top-0 z-50 border-b border-black/10 bg-[#f7b801]">
@@ -987,19 +1066,54 @@ export default function TutorDashboard() {
                           </div>
                         </div>
                       </div>
-                      {/* Action */}
-                      <button
-                        onClick={() => { setActiveMatchId(match.id); setActiveTab("messages"); }}
-                        className={`flex shrink-0 items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-semibold transition ${match.unreadMessages > 0 ? "border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100" : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50"}`}
-                      >
-                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
-                        </svg>
-                        Message
-                        {match.unreadMessages > 0 && (
-                          <span className="flex size-5 items-center justify-center rounded-full bg-amber-500 text-[10px] font-bold text-white">{match.unreadMessages}</span>
+                      {/* Actions */}
+                      <div className="flex shrink-0 flex-col gap-2">
+                        <button
+                          onClick={() => { setActiveMatchId(match.id); setActiveTab("messages"); }}
+                          className={`flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-semibold transition ${match.unreadMessages > 0 ? "border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100" : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50"}`}
+                        >
+                          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+                          </svg>
+                          Message
+                          {match.unreadMessages > 0 && (
+                            <span className="flex size-5 items-center justify-center rounded-full bg-amber-500 text-[10px] font-bold text-white">{match.unreadMessages}</span>
+                          )}
+                        </button>
+                        {!gmeetUrl ? (
+                          <button
+                            onClick={() => setProfileOpen(true)}
+                            title="Add a Google Meet link to your profile first"
+                            className="flex items-center gap-2 rounded-xl border border-dashed border-gray-300 bg-gray-50 px-4 py-2.5 text-sm font-semibold text-gray-400 transition hover:border-amber-300 hover:text-amber-600 hover:bg-amber-50"
+                          >
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M15 10l4.553-2.669A1 1 0 0121 8.232v7.536a1 1 0 01-1.447.9L15 14"/><rect x="1" y="6" width="14" height="12" rx="2"/>
+                            </svg>
+                            Add Meet Link
+                          </button>
+                        ) : meetInvites[match.id] ? (
+                          <button
+                            onClick={() => toggleMeetInvite(match)}
+                            className="relative flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-2.5 text-sm font-semibold text-red-600 transition hover:bg-red-100"
+                          >
+                            <span className="size-2 rounded-full bg-emerald-400 animate-pulse shrink-0" />
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M15 10l4.553-2.669A1 1 0 0121 8.232v7.536a1 1 0 01-1.447.9L15 14"/><rect x="1" y="6" width="14" height="12" rx="2"/>
+                            </svg>
+                            End Meet
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => toggleMeetInvite(match)}
+                            className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm font-semibold text-emerald-700 transition hover:bg-emerald-100"
+                          >
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M15 10l4.553-2.669A1 1 0 0121 8.232v7.536a1 1 0 01-1.447.9L15 14"/><rect x="1" y="6" width="14" height="12" rx="2"/>
+                            </svg>
+                            Start Meet
+                          </button>
                         )}
-                      </button>
+                      </div>
                     </div>
                   </div>
                 ))}

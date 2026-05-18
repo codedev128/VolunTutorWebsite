@@ -29,10 +29,8 @@ export default function Home() {
               <span className="italic text-amber-500">great teacher.</span>
             </h1>
 
-            <p className="mt-6 max-w-xl text-lg leading-relaxed text-gray-600">
-              VolunTutor connects students with passionate volunteer tutors — for
-              free, always. Whether you need help or want to give it, there&apos;s a
-              seat at the table for you.
+            <p className="mt-6 max-w-2xl text-lg leading-relaxed text-gray-600">
+              At VolunTutor, we believe that vision does not define potential. We connect visually impaired students with dedicated VolunTutors for personalised, one-on-one online learning — at no cost. Together, we make education accessible, inclusive, and limitless.
             </p>
 
             <div className="mt-10 flex flex-wrap items-center justify-center gap-4">

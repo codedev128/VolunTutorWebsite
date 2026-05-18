@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect, Suspense } from "react";
+import { useState, useCallback, useEffect, useRef, Suspense } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import RhythmicRipplesBackground from "@/components/ui/rhythmic-ripples-background";
@@ -26,6 +26,16 @@ const GRADE_OPTIONS = [
   { value: "PG",       label: "University (PG)"  },
   { value: "PHD",      label: "PhD"              },
 ];
+
+const GRADE_LABELS: Record<string, string> = {
+  GRADE_6: "Grade 6", GRADE_7: "Grade 7", GRADE_8: "Grade 8",
+  GRADE_9: "Grade 9", GRADE_10: "Grade 10", GRADE_11: "Grade 11",
+  GRADE_12: "Grade 12", UG: "University (UG)", PG: "University (PG)", PHD: "PhD",
+};
+
+const RECURRENCE_LABELS: Record<number, string> = {
+  1: "One-off session", 2: "2 weeks", 3: "3 weeks", 4: "1 month", 8: "2 months",
+};
 
 const MORNING_HOURS = Array.from({ length: 6 }, (_, i) => i + 6);
 const EVENING_HOURS = Array.from({ length: 10 }, (_, i) => i + 12);
@@ -65,6 +75,14 @@ function formatHourRange(h: number) { return `${formatHour(h)} – ${formatHour(
 function formatWeekRange(dates: Date[]) {
   const opts: Intl.DateTimeFormatOptions = { month: "short", day: "numeric" };
   return `${dates[0].toLocaleDateString("en-GB", opts)} – ${dates[6].toLocaleDateString("en-GB", opts)}`;
+}
+
+function slotKeyToLabel(key: string): string {
+  const parts = key.split("-");
+  const hour = parseInt(parts[3]);
+  const date = new Date(`${parts[0]}-${parts[1]}-${parts[2]}T00:00:00`);
+  const dayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+  return `${dayNames[date.getDay()]}, ${date.getDate()} ${date.toLocaleDateString("en-GB", { month: "long" })} · ${formatHourRange(hour)}`;
 }
 
 /* ── Weekly timetable ────────────────────────────────── */
@@ -238,6 +256,9 @@ function FindPageContent() {
   const [pendingSlots, setPendingSlots]       = useState<Set<string>>(new Set());
   const [tutorBookedSlots, setTutorBookedSlots] = useState<Set<string>>(new Set());
   const [targetTutor, setTargetTutor]         = useState<{ id: string; name: string; initials: string } | null>(null);
+  const [submitted, setSubmitted]             = useState(false);
+  const [confirmedSlots, setConfirmedSlots]   = useState<string[]>([]);
+  const confirmRef = useRef<HTMLDivElement>(null);
 
   // Require login — redirect to auth page if not signed in
   useEffect(() => {
@@ -302,6 +323,10 @@ function FindPageContent() {
     } catch { /* ignore */ }
   }, [targetTutorId]);
 
+  useEffect(() => {
+    if (submitted) confirmRef.current?.focus();
+  }, [submitted]);
+
   const charLeft = 500 - helpMessage.length;
 
   const toggleSlot = useCallback((key: string) => {
@@ -340,10 +365,113 @@ function FindPageContent() {
       const existing = JSON.parse(localStorage.getItem("vt_student_requests") || "[]");
       localStorage.setItem("vt_student_requests", JSON.stringify([...existing, request]));
     } catch { /* ignore */ }
-    router.push("/find/dashboard");
+    setConfirmedSlots([...cleanSlots].sort());
+    setSubmitted(true);
   }
 
   if (isLoading || !user) return null;
+
+  if (submitted) {
+    return (
+      <RhythmicRipplesBackground backgroundColor="#ffffff" rippleColor="rgba(247, 184, 1, 0.4)" rippleCount={18} rippleSpeed={0.4}>
+        <div
+          ref={confirmRef}
+          role="alert"
+          aria-live="assertive"
+          aria-atomic="true"
+          tabIndex={-1}
+          className="relative flex w-full max-w-xl flex-col px-6 py-12 outline-none"
+        >
+          <div className="rounded-2xl border border-black/10 bg-white/90 p-8 shadow-sm backdrop-blur-sm space-y-6">
+            {/* Success icon + heading */}
+            <div className="flex flex-col items-center text-center gap-3">
+              <div className="flex size-16 items-center justify-center rounded-full bg-amber-100 border-2 border-amber-300">
+                <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#d97706" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <polyline points="20 6 9 17 4 12"/>
+                </svg>
+              </div>
+              <h1 className="text-3xl font-bold text-gray-900">Request submitted!</h1>
+              <p className="text-sm text-gray-500 max-w-xs">
+                {targetTutor
+                  ? `Your request has been sent directly to ${targetTutor.name}.`
+                  : "We're finding the right VolunTutor for you."}
+              </p>
+            </div>
+
+            {/* Summary card */}
+            <div className="space-y-3" aria-label="Booking summary">
+              <p className="text-xs font-bold uppercase tracking-widest text-amber-600">Booking Summary</p>
+
+              {/* Subject + grade */}
+              <div className="flex items-center justify-between rounded-xl border border-amber-100 bg-amber-50 px-4 py-3">
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-amber-600">Subject</p>
+                  <p className="font-bold text-gray-900">{subject}</p>
+                </div>
+                <div className="text-right">
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-amber-600">Level</p>
+                  <p className="font-semibold text-gray-800">{GRADE_LABELS[gradeLevel] ?? gradeLevel}</p>
+                </div>
+              </div>
+
+              {/* Target tutor */}
+              {targetTutor && (
+                <div className="flex items-center gap-3 rounded-xl border border-amber-100 bg-amber-50 px-4 py-3">
+                  <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-amber-400 text-xs font-black text-white" aria-hidden="true">
+                    {targetTutor.initials}
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-semibold uppercase tracking-wider text-amber-600">Requested Tutor</p>
+                    <p className="font-bold text-gray-900">{targetTutor.name}</p>
+                  </div>
+                </div>
+              )}
+
+              {/* Recurrence */}
+              <div className="flex items-center justify-between rounded-xl border border-gray-100 bg-gray-50 px-4 py-3">
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Duration</p>
+                  <p className="font-semibold text-gray-800">{RECURRENCE_LABELS[recurrenceWeeks] ?? `${recurrenceWeeks} weeks`}</p>
+                </div>
+                <div className="text-right">
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Slots requested</p>
+                  <p className="font-semibold text-gray-800">{confirmedSlots.length}</p>
+                </div>
+              </div>
+
+              {/* Time slots */}
+              <div className="rounded-xl border border-gray-100 bg-gray-50 px-4 py-3">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-3">
+                  Requested time slots
+                </p>
+                <ul className="space-y-2" aria-label={`${confirmedSlots.length} requested session slot${confirmedSlots.length !== 1 ? "s" : ""}`}>
+                  {confirmedSlots.map((slot) => (
+                    <li key={slot} className="flex items-center gap-2.5 text-sm text-gray-800">
+                      <span aria-hidden="true" className="flex size-5 shrink-0 items-center justify-center rounded-full bg-amber-100 border border-amber-200">
+                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#d97706" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                          <rect x="3" y="4" width="18" height="18" rx="2"/><line x1="3" y1="10" x2="21" y2="10"/>
+                        </svg>
+                      </span>
+                      {slotKeyToLabel(slot)}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+
+            {/* CTA */}
+            <button
+              type="button"
+              onClick={() => router.push("/find/dashboard")}
+              className="w-full rounded-full bg-gray-900 py-3.5 text-sm font-semibold text-white shadow-md transition hover:-translate-y-0.5 hover:bg-gray-700 active:translate-y-0"
+            >
+              Go to my dashboard →
+            </button>
+          </div>
+        </div>
+      </RhythmicRipplesBackground>
+    );
+  }
 
   return (
     <RhythmicRipplesBackground backgroundColor="#ffffff" rippleColor="rgba(247, 184, 1, 0.4)" rippleCount={18} rippleSpeed={0.4}>

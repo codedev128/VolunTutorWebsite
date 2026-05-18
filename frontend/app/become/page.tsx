@@ -16,6 +16,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useAuth } from "@/context/auth-context";
+import { validateEmail, verifyEmailDomain } from "@/lib/email-validation";
 
 function BrandMark() {
   return (
@@ -51,45 +52,99 @@ function AmberButton({ children, onClick, disabled }: { children: React.ReactNod
 function SignUpDialog() {
   const id = useId();
   const router = useRouter();
-  const { signUp } = useAuth();
   const [name, setName]           = useState("");
   const [email, setEmail]         = useState("");
   const [password, setPassword]   = useState("");
   const [confirm, setConfirm]     = useState("");
-  const [error, setError]         = useState("");
-  const [loading, setLoading]     = useState(false);
+  const [cvFile, setCvFile]       = useState<File | null>(null);
+  const [error, setError]           = useState("");
+  const [suggestion, setSuggestion] = useState("");
+  const [verifying, setVerifying]   = useState(false);
+  const [loading, setLoading]       = useState(false);
 
-  function handleSignUp() {
+  async function handleSignUp(ignoreSuggestion = false) {
     setError("");
+    if (!ignoreSuggestion) setSuggestion("");
     if (!name.trim() || !email.trim() || !password.trim() || !confirm.trim()) {
       setError("Please fill in all fields."); return;
     }
+    if (!cvFile) { setError("Please attach your CV or resume."); return; }
+    const emailCheck = validateEmail(email);
+    if (!emailCheck.ok) { setError(emailCheck.error!); return; }
+    if (!ignoreSuggestion && emailCheck.suggestion) { setSuggestion(emailCheck.suggestion); return; }
     if (password.length < 8) {
       setError("Password must be at least 8 characters."); return;
     }
     if (password !== confirm) {
       setError("Passwords do not match."); return;
     }
+    // Check for duplicate application or account
+    try {
+      const apps: { email: string; status: string; reviewNote?: string }[] =
+        JSON.parse(localStorage.getItem("vt_tutor_applications") || "[]");
+      const existing = apps.find((a) => a.email === email.trim().toLowerCase());
+      if (existing) {
+        if (existing.status === "pending") {
+          localStorage.setItem("vt_pending_email", email.trim().toLowerCase());
+          router.push("/become/pending"); return;
+        }
+        if (existing.status === "denied") {
+          setError(`Your previous application was denied${existing.reviewNote ? `: "${existing.reviewNote}"` : ""}. Please contact support.`); return;
+        }
+        setError("An account with this email already exists. Please sign in."); return;
+      }
+      const users: { email: string }[] = JSON.parse(localStorage.getItem("vt_users") || "[]");
+      if (users.find((u) => u.email === email.trim().toLowerCase())) {
+        setError("An account with this email already exists. Please sign in."); return;
+      }
+    } catch { /* ignore */ }
+    setVerifying(true);
+    const domainCheck = await verifyEmailDomain(email);
+    setVerifying(false);
+    if (!domainCheck.ok) { setError(domainCheck.error!); return; }
     setLoading(true);
-    const result = signUp(name.trim(), email.trim(), password);
-    if (!result.ok) { setError(result.error ?? "Something went wrong."); setLoading(false); return; }
-    router.push("/become/onboarding");
+    try {
+      const cvDataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = () => reject(new Error("File read failed"));
+        reader.readAsDataURL(cvFile);
+      });
+      const app = {
+        id: Date.now().toString(),
+        name: name.trim(),
+        email: email.trim().toLowerCase(),
+        password,
+        cvFileName: cvFile.name,
+        cvDataUrl,
+        status: "pending",
+        submittedAt: new Date().toISOString(),
+      };
+      const apps = JSON.parse(localStorage.getItem("vt_tutor_applications") || "[]");
+      apps.push(app);
+      localStorage.setItem("vt_tutor_applications", JSON.stringify(apps));
+      localStorage.setItem("vt_pending_email", app.email);
+      router.push("/become/pending");
+    } catch {
+      setError("Failed to read CV file. Please try a different file.");
+      setLoading(false);
+    }
   }
 
   return (
     <Dialog>
       <DialogTrigger asChild>
         <button className="w-full rounded-full bg-gray-900 px-8 py-3.5 text-sm font-semibold text-white shadow-md transition hover:-translate-y-0.5 hover:bg-gray-700 active:translate-y-0">
-          Create an account →
+          Apply to become a VolunTutor →
         </button>
       </DialogTrigger>
-      <DialogContent>
+      <DialogContent className="max-h-[90vh] overflow-y-auto">
         <div className="flex flex-col items-center gap-2">
           <BrandMark />
           <DialogHeader>
-            <DialogTitle className="sm:text-center">Become a VolunTutor</DialogTitle>
+            <DialogTitle className="sm:text-center">Apply to become a VolunTutor</DialogTitle>
             <DialogDescription className="sm:text-center">
-              Create your account — then set up your subjects and schedule.
+              Submit your application — a moderator will review your CV and approve your account.
             </DialogDescription>
           </DialogHeader>
         </div>
@@ -109,20 +164,73 @@ function SignUpDialog() {
             </div>
             <div className="space-y-2">
               <Label htmlFor={`${id}-confirm`}>Confirm password</Label>
-              <Input id={`${id}-confirm`} placeholder="Repeat your password" type="password" value={confirm} onChange={(e) => setConfirm(e.target.value)} onKeyDown={(e) => e.key === "Enter" && handleSignUp()} />
+              <Input id={`${id}-confirm`} placeholder="Repeat your password" type="password" value={confirm} onChange={(e) => setConfirm(e.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <Label>CV / Resume <span className="text-red-500 ml-0.5">*</span></Label>
+              <label
+                htmlFor={`${id}-cv`}
+                className={`flex cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed py-5 px-3 text-center transition ${
+                  cvFile ? "border-amber-300 bg-amber-50" : "border-gray-200 hover:border-amber-300 hover:bg-amber-50/50"
+                }`}
+              >
+                {cvFile ? (
+                  <div className="flex items-center gap-2 text-sm font-medium text-amber-700">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>
+                    </svg>
+                    <span className="truncate max-w-[180px]">{cvFile.name}</span>
+                    <button type="button" onClick={(e) => { e.preventDefault(); setCvFile(null); }}
+                      className="ml-1 text-amber-400 hover:text-amber-600 text-lg leading-none">×</button>
+                  </div>
+                ) : (
+                  <>
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#d1d5db" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
+                    </svg>
+                    <div>
+                      <p className="text-sm font-medium text-gray-600">Click to upload your CV</p>
+                      <p className="text-xs text-gray-400 mt-0.5">PDF, DOC, DOCX, or image</p>
+                    </div>
+                  </>
+                )}
+                <input
+                  id={`${id}-cv`}
+                  type="file"
+                  accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,image/*,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                  className="hidden"
+                  onChange={(e) => setCvFile(e.target.files?.[0] ?? null)}
+                />
+              </label>
             </div>
           </div>
+          {suggestion && (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-800">
+              Did you mean{" "}
+              <button
+                type="button"
+                className="font-semibold underline hover:no-underline"
+                onClick={() => { setEmail(suggestion); setSuggestion(""); }}
+              >
+                {suggestion}
+              </button>
+              ?{" "}
+              <button
+                type="button"
+                className="ml-1 text-amber-600 hover:text-amber-800"
+                onClick={() => { setSuggestion(""); handleSignUp(true); }}
+              >
+                No, keep it
+              </button>
+            </div>
+          )}
           {error && <p className="rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-sm text-red-600">{error}</p>}
-          <AmberButton onClick={handleSignUp} disabled={loading}>{loading ? "Creating account…" : "Sign up"}</AmberButton>
+          <AmberButton onClick={() => handleSignUp()} disabled={verifying || loading}>
+            {verifying ? "Verifying email…" : loading ? "Submitting application…" : "Submit application"}
+          </AmberButton>
         </div>
-        <div className="flex items-center gap-3 before:h-px before:flex-1 before:bg-border after:h-px after:flex-1 after:bg-border">
-          <span className="text-xs text-muted-foreground">Or</span>
-        </div>
-        <button type="button" className="w-full flex items-center justify-center gap-2.5 rounded-lg border border-input bg-background px-4 py-2.5 text-sm font-medium shadow-sm transition hover:bg-accent">
-          <GoogleIcon />Continue with Google
-        </button>
         <p className="text-center text-xs text-muted-foreground">
-          By signing up you agree to our <a className="underline hover:no-underline" href="#">Terms</a>.
+          By applying you agree to our <a className="underline hover:no-underline" href="#">Terms</a>.
         </p>
       </DialogContent>
     </Dialog>
@@ -137,12 +245,45 @@ function SignInDialog() {
   const [email, setEmail]       = useState("");
   const [password, setPassword] = useState("");
   const [remember, setRemember] = useState(false);
+  const [showPw, setShowPw]     = useState(false);
   const [error, setError]       = useState("");
   const [loading, setLoading]   = useState(false);
 
   function handleSignIn() {
     setError("");
     if (!email.trim() || !password.trim()) { setError("Please enter your email and password."); return; }
+    if (email.trim() === "admin@voluntutor.app" && password === "Admin@1234") {
+      localStorage.setItem("vt_admin_session", "1");
+      router.push("/admin/dashboard");
+      return;
+    }
+    // Check moderator credentials
+    try {
+      const mods: { id: string; email: string; password: string }[] =
+        JSON.parse(localStorage.getItem("vt_moderators") || "[]");
+      const mod = mods.find((m) => m.email === email.trim().toLowerCase() && m.password === password);
+      if (mod) {
+        localStorage.setItem("vt_mod_session", mod.id);
+        router.push("/mod/dashboard");
+        return;
+      }
+    } catch { /* ignore */ }
+    // Check tutor applications
+    try {
+      const apps: { email: string; password: string; status: string; reviewNote?: string }[] =
+        JSON.parse(localStorage.getItem("vt_tutor_applications") || "[]");
+      const app = apps.find((a) => a.email === email.trim().toLowerCase() && a.password === password);
+      if (app) {
+        if (app.status === "pending") {
+          localStorage.setItem("vt_pending_email", app.email);
+          router.push("/become/pending"); return;
+        }
+        if (app.status === "denied") {
+          setError(`Your tutor application was denied${app.reviewNote ? `: "${app.reviewNote}"` : ""}. Please contact support.`); return;
+        }
+        // approved — account was created, fall through to normal sign-in
+      }
+    } catch { /* ignore */ }
     setLoading(true);
     const result = signIn(email.trim(), password);
     if (!result.ok) { setError(result.error ?? "Something went wrong."); setLoading(false); return; }
@@ -173,7 +314,21 @@ function SignInDialog() {
             </div>
             <div className="space-y-2">
               <Label htmlFor={`${id}-password`}>Password</Label>
-              <Input id={`${id}-password`} placeholder="Enter your password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} onKeyDown={(e) => e.key === "Enter" && handleSignIn()} />
+              <div className="relative">
+                <Input id={`${id}-password`} placeholder="Enter your password" type={showPw ? "text" : "password"} value={password} onChange={(e) => setPassword(e.target.value)} onKeyDown={(e) => e.key === "Enter" && handleSignIn()} className="pr-10" />
+                <button type="button" onClick={() => setShowPw((v) => !v)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition">
+                  {showPw ? (
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/>
+                    </svg>
+                  ) : (
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
+                    </svg>
+                  )}
+                </button>
+              </div>
             </div>
           </div>
           <div className="flex justify-between gap-2">
@@ -231,7 +386,7 @@ export default function BecomePage() {
             Become a <span className="italic text-amber-500">VolunTutor.</span>
           </h1>
           <p className="mt-4 max-w-sm text-base leading-relaxed text-gray-600">
-            Share your knowledge, change a life. Always free — for you and your students.
+            Share your knowledge, change a life. Help visually impaired students unlock their potential — always free, for you and your students.
           </p>
         </div>
 
@@ -239,8 +394,8 @@ export default function BecomePage() {
           <div className="flex flex-1 flex-col gap-5 rounded-2xl border border-black/10 bg-white/80 p-8 shadow-sm backdrop-blur-sm">
             <div className="flex flex-col gap-1 text-left">
               <p className="text-xs font-semibold uppercase tracking-widest text-amber-600">New here</p>
-              <h2 className="text-xl font-bold text-gray-900">Create an account</h2>
-              <p className="mt-1 text-sm text-gray-500">Join thousands of tutors making a difference.</p>
+              <h2 className="text-xl font-bold text-gray-900">Apply to tutor</h2>
+              <p className="mt-1 text-sm text-gray-500">Submit your application with your CV — a moderator will review and approve it.</p>
             </div>
             <SignUpDialog />
           </div>

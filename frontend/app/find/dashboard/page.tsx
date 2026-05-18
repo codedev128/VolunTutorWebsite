@@ -170,16 +170,16 @@ function StudentTimetable({ matches }: { matches: TutorMatch[] }) {
   return (
     <div className="rounded-xl border border-gray-200 bg-white overflow-hidden text-xs">
       <div className="flex items-center justify-between border-b border-gray-100 bg-gray-50 px-3 py-1.5">
-        <button type="button" onClick={() => setWeekOffset((w) => w - 1)}
-          className="flex size-5 items-center justify-center rounded border border-gray-200 bg-white text-gray-400 hover:text-teal-600 transition">
-          <svg width="10" height="10" viewBox="0 0 14 14" fill="none">
+        <button type="button" aria-label="Previous week" onClick={() => setWeekOffset((w) => w - 1)}
+          className="flex size-5 items-center justify-center rounded border border-gray-200 bg-white text-gray-400 hover:text-amber-600 transition">
+          <svg aria-hidden="true" width="10" height="10" viewBox="0 0 14 14" fill="none">
             <path d="M9 11L5 7L9 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
           </svg>
         </button>
         <span className="text-[10px] font-bold text-gray-600">{formatWeekRange(dates)}</span>
-        <button type="button" onClick={() => setWeekOffset((w) => w + 1)}
-          className="flex size-5 items-center justify-center rounded border border-gray-200 bg-white text-gray-400 hover:text-teal-600 transition">
-          <svg width="10" height="10" viewBox="0 0 14 14" fill="none">
+        <button type="button" aria-label="Next week" onClick={() => setWeekOffset((w) => w + 1)}
+          className="flex size-5 items-center justify-center rounded border border-gray-200 bg-white text-gray-400 hover:text-amber-600 transition">
+          <svg aria-hidden="true" width="10" height="10" viewBox="0 0 14 14" fill="none">
             <path d="M5 3l4 4-4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
           </svg>
         </button>
@@ -189,26 +189,28 @@ function StudentTimetable({ matches }: { matches: TutorMatch[] }) {
           const hasBooked = t === "morning" ? morningBooked : eveningBooked;
           return (
             <button key={t} type="button" onClick={() => setTab(t)}
+              aria-pressed={tab === t}
               className={`relative flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[10px] font-semibold transition ${
-                tab === t ? "bg-teal-500 text-white shadow-sm" : "text-gray-500 hover:text-teal-600"
+                tab === t ? "bg-amber-400 text-white shadow-sm" : "text-gray-500 hover:text-amber-600"
               }`}>
               {t === "morning" ? "Morning" : "Evening"}
-              {hasBooked && <span className={`size-1.5 rounded-full ${tab === t ? "bg-white" : "bg-teal-500"}`} />}
+              {hasBooked && <span aria-hidden="true" className={`size-1.5 rounded-full ${tab === t ? "bg-white" : "bg-amber-400"}`} />}
             </button>
           );
         })}
       </div>
       <div className="overflow-x-auto">
-        <table className="w-full border-collapse" style={{ minWidth: 480 }}>
+        <table role="grid" aria-label="Weekly class schedule" className="w-full border-collapse" style={{ minWidth: 480 }}>
+          <caption className="sr-only">Weekly class schedule for {formatWeekRange(dates)}</caption>
           <thead>
             <tr>
-              <th className="w-20 border-b border-r border-gray-100 bg-gray-50 py-1 text-center text-[9px] font-bold uppercase tracking-widest text-gray-400">Time</th>
+              <th scope="col" className="w-20 border-b border-r border-gray-100 bg-gray-50 py-1 text-center text-[9px] font-bold uppercase tracking-widest text-gray-400">Time</th>
               {dates.map((d, i) => {
                 const isToday = isoDate(d) === today;
                 return (
-                  <th key={i} className={`border-b border-r border-gray-100 py-1 text-center last:border-r-0 ${isToday ? "bg-teal-50" : "bg-gray-50"}`}>
-                    <p className={`text-[10px] font-bold ${isToday ? "text-teal-600" : "text-gray-500"}`}>{DAY_LABELS[i]}</p>
-                    <p className={`text-[9px] font-semibold ${isToday ? "text-teal-400" : "text-gray-400"}`}>{d.getDate()}</p>
+                  <th scope="col" key={i} className={`border-b border-r border-gray-100 py-1 text-center last:border-r-0 ${isToday ? "bg-amber-50" : "bg-gray-50"}`}>
+                    <p className={`text-[10px] font-bold ${isToday ? "text-amber-600" : "text-gray-500"}`}>{DAY_LABELS[i]}</p>
+                    <p className={`text-[9px] font-semibold ${isToday ? "text-amber-400" : "text-gray-400"}`}>{d.getDate()}</p>
                   </th>
                 );
               })}
@@ -227,9 +229,10 @@ function StudentTimetable({ matches }: { matches: TutorMatch[] }) {
                   return (
                     <td key={i}
                       title={booked ? `${booked.name} — your class` : undefined}
+                      aria-label={booked ? `${booked.name} class session` : isToday ? "Today, available" : "Available slot"}
                       className={`h-8 relative border-b border-r border-gray-100 last:border-r-0 ${
-                        booked ? "bg-teal-600 cursor-default"
-                          : isToday ? "bg-teal-50/60"
+                        booked ? "bg-amber-500 cursor-default"
+                          : isToday ? "bg-amber-50/60"
                           : ""
                       }`}>
                       {booked && (
@@ -247,42 +250,57 @@ function StudentTimetable({ matches }: { matches: TutorMatch[] }) {
         </table>
       </div>
       <div className="flex items-center gap-3 border-t border-gray-100 bg-gray-50 px-3 py-1">
-        <div className="flex items-center gap-1"><div className="size-2.5 rounded-sm bg-teal-600" /><span className="text-[9px] text-gray-500">Booked session</span></div>
-        <div className="flex items-center gap-1"><div className="size-2.5 rounded-sm bg-teal-50 border border-teal-200" /><span className="text-[9px] text-gray-500">Today</span></div>
-        <p className="ml-auto text-[9px] text-gray-400">{bookedSlots.size} booked</p>
+        <div className="flex items-center gap-1"><div className="size-2.5 rounded-sm bg-amber-500" /><span className="text-[9px] text-gray-500">Booked session</span></div>
+        <div className="flex items-center gap-1"><div className="size-2.5 rounded-sm bg-amber-50 border border-amber-200" /><span className="text-[9px] text-gray-500">Today</span></div>
+        <p className="ml-auto text-[9px] text-gray-400" aria-live="polite" aria-atomic="true">{bookedSlots.size} booked session{bookedSlots.size !== 1 ? "s" : ""}</p>
       </div>
     </div>
   );
 }
 
 /* ── Small components ────────────────────────────────── */
-function Avatar({ initials, src, size = "md", color = "teal", onClick }: {
+function Avatar({ initials, src, size = "md", color = "amber", onClick, ariaLabel }: {
   initials: string;
   src?: string | null;
   size?: "sm" | "md" | "lg";
   color?: "teal" | "amber" | "blue" | "green" | "purple" | "rose";
   onClick?: () => void;
+  ariaLabel?: string;
 }) {
   const sz = { sm: "size-8 text-xs", md: "size-10 text-sm", lg: "size-16 text-xl" }[size];
   const cl = {
-    teal:   "bg-teal-100 text-teal-700 border-teal-200",
+    teal:   "bg-amber-100 text-amber-700 border-amber-200",
     amber:  "bg-amber-100 text-amber-700 border-amber-200",
     blue:   "bg-blue-100 text-blue-700 border-blue-200",
     green:  "bg-emerald-100 text-emerald-700 border-emerald-200",
     purple: "bg-violet-100 text-violet-700 border-violet-200",
     rose:   "bg-rose-100 text-rose-700 border-rose-200",
   }[color];
-  const interactiveCls = onClick ? "cursor-pointer ring-offset-2 hover:ring-2 hover:ring-teal-400 transition" : "";
+  const interactiveCls = onClick ? "cursor-pointer ring-offset-2 hover:ring-2 hover:ring-amber-400 transition" : "";
   if (src) {
     return (
-      <div className={`${sz} shrink-0 rounded-full border border-teal-200 overflow-hidden ${interactiveCls}`} onClick={onClick}>
-        <img src={src} alt="Profile" className="w-full h-full object-cover" />
+      <div
+        className={`${sz} shrink-0 rounded-full border border-amber-200 overflow-hidden ${interactiveCls}`}
+        onClick={onClick}
+        role={onClick ? "button" : undefined}
+        tabIndex={onClick ? 0 : undefined}
+        aria-label={ariaLabel}
+        onKeyDown={onClick ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(); } } : undefined}
+      >
+        <img src={src} alt={ariaLabel ?? "Profile photo"} className="w-full h-full object-cover" />
       </div>
     );
   }
   return (
-    <div className={`${sz} ${cl} flex shrink-0 items-center justify-center rounded-full border font-bold ${interactiveCls}`} onClick={onClick}>
-      {initials}
+    <div
+      className={`${sz} ${cl} flex shrink-0 items-center justify-center rounded-full border font-bold ${interactiveCls}`}
+      onClick={onClick}
+      role={onClick ? "button" : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      aria-label={ariaLabel}
+      onKeyDown={onClick ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(); } } : undefined}
+    >
+      <span aria-hidden="true">{initials}</span>
     </div>
   );
 }
@@ -299,17 +317,17 @@ function Stat({ label, value }: { label: string; value: string | number }) {
 function StatusBadge({ status }: { status: MatchStatus }) {
   if (status === "ACTIVE") return (
     <span className="flex items-center gap-1.5 text-xs font-semibold text-emerald-600">
-      <span className="size-1.5 rounded-full bg-emerald-500" />Active
+      <span aria-hidden="true" className="size-1.5 rounded-full bg-emerald-500" />Active
     </span>
   );
   if (status === "AWAITING_FIRST_SESSION") return (
     <span className="flex items-center gap-1.5 text-xs font-semibold text-amber-600">
-      <span className="size-1.5 rounded-full bg-amber-400" />Awaiting first session
+      <span aria-hidden="true" className="size-1.5 rounded-full bg-amber-400" />Awaiting first session
     </span>
   );
   return (
     <span className="flex items-center gap-1.5 text-xs font-semibold text-gray-400">
-      <span className="size-1.5 rounded-full bg-gray-300" />Paused
+      <span aria-hidden="true" className="size-1.5 rounded-full bg-gray-300" />Paused
     </span>
   );
 }
@@ -317,17 +335,17 @@ function StatusBadge({ status }: { status: MatchStatus }) {
 function RequestStatusBadge({ status }: { status: MyRequest["status"] }) {
   if (status === "accepted") return (
     <span className="flex items-center gap-1 rounded-full bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 text-xs font-semibold text-emerald-700">
-      <span className="size-1.5 rounded-full bg-emerald-500" />Accepted
+      <span aria-hidden="true" className="size-1.5 rounded-full bg-emerald-500" />Accepted
     </span>
   );
   if (status === "cancelled") return (
     <span className="flex items-center gap-1 rounded-full bg-red-50 border border-red-200 px-2.5 py-0.5 text-xs font-semibold text-red-600">
-      <span className="size-1.5 rounded-full bg-red-400" />Cancelled
+      <span aria-hidden="true" className="size-1.5 rounded-full bg-red-400" />Cancelled
     </span>
   );
   return (
     <span className="flex items-center gap-1 rounded-full bg-amber-50 border border-amber-200 px-2.5 py-0.5 text-xs font-semibold text-amber-700">
-      <span className="size-1.5 animate-pulse rounded-full bg-amber-400" />Pending
+      <span aria-hidden="true" className="size-1.5 animate-pulse rounded-full bg-amber-400" />Pending
     </span>
   );
 }
@@ -363,22 +381,28 @@ function TutorReviewsModal({
     count: reviews.filter((r) => Math.round(r.rating) === star).length,
   }));
 
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
+
   return (
     <>
       <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-[2px]" onClick={onClose} />
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-        <div className="flex w-full max-w-lg flex-col rounded-2xl bg-white shadow-2xl max-h-[85vh]">
+        <div role="dialog" aria-modal="true" aria-labelledby="reviews-modal-title" className="flex w-full max-w-lg flex-col rounded-2xl bg-white shadow-2xl max-h-[85vh]">
           {/* Header */}
           <div className="flex items-center justify-between border-b border-gray-100 px-6 py-4 shrink-0">
             <div>
-              <p className="font-bold text-gray-900">Reviews for {tutorName}</p>
+              <h2 id="reviews-modal-title" className="font-bold text-gray-900">Reviews for {tutorName}</h2>
               <p className="text-xs text-gray-400 mt-0.5">
                 {reviewCount > 0 ? `${reviewCount} review${reviewCount !== 1 ? "s" : ""}` : "No reviews yet"}
               </p>
             </div>
-            <button onClick={onClose}
+            <button onClick={onClose} aria-label="Close reviews"
               className="flex size-7 items-center justify-center rounded-full text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+              <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
                 <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
               </svg>
             </button>
@@ -399,8 +423,8 @@ function TutorReviewsModal({
                 {/* Summary */}
                 <div className="flex items-center gap-6 border-b border-gray-100 px-6 py-5">
                   <div className="flex flex-col items-center gap-1">
-                    <span className="text-4xl font-black text-gray-900">{avgRating?.toFixed(1)}</span>
-                    <div className="flex gap-0.5">
+                    <span className="text-4xl font-black text-gray-900" aria-label={`Average rating: ${avgRating?.toFixed(1)} out of 5`}>{avgRating?.toFixed(1)}</span>
+                    <div aria-hidden="true" className="flex gap-0.5">
                       {Array.from({ length: 5 }, (_, i) => (
                         <svg key={i} width="14" height="14" viewBox="0 0 24 24"
                           fill={i < Math.round(avgRating ?? 0) ? "#f59e0b" : "#e5e7eb"} stroke="none">
@@ -438,13 +462,13 @@ function TutorReviewsModal({
                     return (
                       <div key={i} className="py-4">
                         <div className="flex items-start gap-3">
-                          <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-teal-100 text-xs font-bold text-teal-700 border border-teal-200">
+                          <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-amber-100 text-xs font-bold text-amber-700 border border-amber-200">
                             {initials}
                           </div>
                           <div className="flex-1 min-w-0">
                             <div className="flex flex-wrap items-center gap-2">
                               <span className="text-sm font-semibold text-gray-900">{r.name}</span>
-                              <div className="flex gap-0.5">
+                              <div aria-hidden="true" className="flex gap-0.5">
                                 {Array.from({ length: 5 }, (_, si) => (
                                   <svg key={si} width="11" height="11" viewBox="0 0 24 24"
                                     fill={si < r.rating ? "#f59e0b" : "#e5e7eb"} stroke="none">
@@ -534,7 +558,7 @@ function SearchVolunTutor() {
     return true;
   });
 
-  const filterCls = "flex h-9 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 shadow-sm focus:border-teal-400 focus:outline-none focus:ring-2 focus:ring-teal-100";
+  const filterCls = "flex h-9 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 shadow-sm focus:border-amber-400 focus:outline-none focus:ring-2 focus:ring-amber-100";
 
   return (
     <>
@@ -557,24 +581,26 @@ function SearchVolunTutor() {
           </svg>
           <input
             type="text"
+            aria-label="Search tutors by name"
             placeholder="Search by tutor name…"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            className="w-full h-9 rounded-lg border border-gray-200 bg-white pl-8 pr-3 text-sm text-gray-700 shadow-sm focus:border-teal-400 focus:outline-none focus:ring-2 focus:ring-teal-100"
+            className="w-full h-9 rounded-lg border border-gray-200 bg-white pl-8 pr-3 text-sm text-gray-700 shadow-sm focus:border-amber-400 focus:outline-none focus:ring-2 focus:ring-amber-100"
           />
         </div>
         {/* Subject filter */}
-        <select value={subjectFilter} onChange={(e) => setSubjectFilter(e.target.value)} className={filterCls}>
+        <select aria-label="Filter by subject" value={subjectFilter} onChange={(e) => setSubjectFilter(e.target.value)} className={filterCls}>
           <option value="">All subjects</option>
           {SUBJECTS_LIST.map((s) => <option key={s} value={s}>{s}</option>)}
         </select>
         {/* Grade filter */}
-        <select value={gradeFilter} onChange={(e) => setGradeFilter(e.target.value)} className={filterCls}>
+        <select aria-label="Filter by grade level" value={gradeFilter} onChange={(e) => setGradeFilter(e.target.value)} className={filterCls}>
           <option value="">All grades</option>
           {GRADE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
         </select>
         {(subjectFilter || gradeFilter || query) && (
           <button
+            aria-label="Clear all filters"
             onClick={() => { setSubjectFilter(""); setGradeFilter(""); setQuery(""); }}
             className="text-xs font-semibold text-gray-400 hover:text-red-500 transition"
           >
@@ -584,7 +610,7 @@ function SearchVolunTutor() {
       </div>
 
       {/* Results count */}
-      <p className="text-xs text-gray-400 font-medium">
+      <p aria-live="polite" aria-atomic="true" className="text-xs text-gray-400 font-medium">
         {filtered.length} tutor{filtered.length !== 1 ? "s" : ""} available
       </p>
 
@@ -607,7 +633,7 @@ function SearchVolunTutor() {
         <div className="flex flex-col items-center gap-3 rounded-2xl border border-dashed border-gray-200 bg-white py-12 text-center">
           <p className="font-semibold text-gray-600">No tutors match your filters</p>
           <button onClick={() => { setSubjectFilter(""); setGradeFilter(""); setQuery(""); }}
-            className="text-sm font-semibold text-teal-600 hover:underline">Clear filters</button>
+            className="text-sm font-semibold text-amber-600 hover:underline">Clear filters</button>
         </div>
       )}
 
@@ -622,7 +648,7 @@ function SearchVolunTutor() {
             green:  "bg-emerald-100 text-emerald-700 border-emerald-200",
             purple: "bg-violet-100 text-violet-700 border-violet-200",
             rose:   "bg-rose-100 text-rose-700 border-rose-200",
-            teal:   "bg-teal-100 text-teal-700 border-teal-200",
+            teal:   "bg-amber-100 text-amber-700 border-amber-200",
           };
           const subjectsToShow = subjectFilter
             ? tutor.subjects.filter((s) => s.name.toLowerCase() === subjectFilter.toLowerCase())
@@ -676,7 +702,7 @@ function SearchVolunTutor() {
                     </span>
                   </div>
                 </div>
-                <span className="shrink-0 rounded-full bg-teal-50 border border-teal-200 px-2 py-0.5 text-[10px] font-semibold text-teal-700">
+                <span className="shrink-0 rounded-full bg-amber-50 border border-amber-200 px-2 py-0.5 text-[10px] font-semibold text-amber-700">
                   Volunteer
                 </span>
               </div>
@@ -700,7 +726,7 @@ function SearchVolunTutor() {
 
               {/* Grade compatibility */}
               {gradeFilter && (
-                <p className="text-xs text-teal-600 font-medium flex items-center gap-1">
+                <p className="text-xs text-amber-600 font-medium flex items-center gap-1">
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                     <polyline points="20 6 9 17 4 12"/>
                   </svg>
@@ -711,7 +737,7 @@ function SearchVolunTutor() {
               {/* CTA */}
               <button
                 onClick={() => router.push(`/find?tutorId=${tutor.id}`)}
-                className="mt-auto w-full rounded-xl bg-teal-500 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-teal-400 active:bg-teal-600"
+                className="mt-auto w-full rounded-xl bg-amber-400 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-amber-300 active:bg-amber-500"
               >
                 Request {tutor.name.split(" ")[0]} →
               </button>
@@ -746,6 +772,12 @@ function ReviewModal({
   const [done, setDone] = useState(false);
   const active = hovered || rating;
 
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
+
   function handleSubmit() {
     if (rating === 0) return;
     onSubmit(rating, body.trim());
@@ -756,11 +788,11 @@ function ReviewModal({
     <>
       <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-[2px]" onClick={onClose} />
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-        <div className="w-full max-w-md rounded-2xl bg-white shadow-2xl overflow-hidden">
+        <div role="dialog" aria-modal="true" aria-labelledby="review-modal-title" className="w-full max-w-md rounded-2xl bg-white shadow-2xl overflow-hidden">
           {done ? (
-            <div className="flex flex-col items-center gap-4 px-8 py-12 text-center">
+            <div role="status" aria-live="assertive" className="flex flex-col items-center gap-4 px-8 py-12 text-center">
               <div className="flex size-14 items-center justify-center rounded-full bg-amber-50 border border-amber-200">
-                <svg width="28" height="28" viewBox="0 0 24 24" fill="#f59e0b" stroke="#f59e0b" strokeWidth="0">
+                <svg aria-hidden="true" width="28" height="28" viewBox="0 0 24 24" fill="#f59e0b" stroke="#f59e0b" strokeWidth="0">
                   <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
                 </svg>
               </div>
@@ -768,7 +800,7 @@ function ReviewModal({
                 <p className="text-lg font-bold text-gray-900">Review submitted!</p>
                 <p className="mt-1 text-sm text-gray-500">Thanks for rating {tutorName.split(" ")[0]}.</p>
               </div>
-              <div className="flex gap-1">
+              <div aria-hidden="true" className="flex gap-1">
                 {Array.from({ length: 5 }, (_, i) => (
                   <svg key={i} width="22" height="22" viewBox="0 0 24 24"
                     fill={i < rating ? "#f59e0b" : "#e5e7eb"} stroke="none">
@@ -777,7 +809,7 @@ function ReviewModal({
                 ))}
               </div>
               <button onClick={onClose}
-                className="rounded-full bg-teal-500 px-8 py-2.5 text-sm font-semibold text-white hover:bg-teal-400 transition">
+                className="rounded-full bg-amber-400 px-8 py-2.5 text-sm font-semibold text-white hover:bg-amber-300 transition">
                 Close
               </button>
             </div>
@@ -786,14 +818,14 @@ function ReviewModal({
               {/* Header */}
               <div className="flex items-center justify-between border-b border-gray-100 px-6 py-4">
                 <div>
-                  <p className="font-bold text-gray-900">
+                  <h2 id="review-modal-title" className="font-bold text-gray-900">
                     {existing ? "Edit your review" : "Rate your tutor"}
-                  </p>
+                  </h2>
                   <p className="text-xs text-gray-400 mt-0.5">{tutorName} · {subject}</p>
                 </div>
-                <button onClick={onClose}
+                <button onClick={onClose} aria-label="Close rating dialog"
                   className="flex size-7 items-center justify-center rounded-full text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                  <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
                     <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
                   </svg>
                 </button>
@@ -802,16 +834,18 @@ function ReviewModal({
               <div className="px-6 py-6 space-y-5">
                 {/* Star picker */}
                 <div className="flex flex-col items-center gap-3">
-                  <div className="flex gap-1"
+                  <div role="group" aria-label="Rating" className="flex gap-1"
                     onMouseLeave={() => setHovered(0)}>
                     {Array.from({ length: 5 }, (_, i) => {
                       const val = i + 1;
                       return (
                         <button key={val} type="button"
+                          aria-label={`${val} star${val !== 1 ? 's' : ''}`}
+                          aria-pressed={rating === val}
                           onClick={() => setRating(val)}
                           onMouseEnter={() => setHovered(val)}
                           className="transition-transform hover:scale-110 active:scale-95">
-                          <svg width="36" height="36" viewBox="0 0 24 24"
+                          <svg aria-hidden="true" width="36" height="36" viewBox="0 0 24 24"
                             fill={val <= active ? "#f59e0b" : "#e5e7eb"}
                             stroke={val <= active ? "#f59e0b" : "#d1d5db"}
                             strokeWidth="0.5"
@@ -822,23 +856,24 @@ function ReviewModal({
                       );
                     })}
                   </div>
-                  <p className={`text-sm font-semibold transition-colors ${active > 0 ? "text-amber-500" : "text-gray-300"}`}>
+                  <p aria-live="polite" className={`text-sm font-semibold transition-colors ${active > 0 ? "text-amber-500" : "text-gray-300"}`}>
                     {STAR_LABELS[active] || "Tap to rate"}
                   </p>
                 </div>
 
                 {/* Written review */}
                 <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-gray-600">
+                  <label htmlFor="review-textarea" className="text-xs font-semibold text-gray-600">
                     Written review <span className="text-gray-400 font-normal">(optional)</span>
                   </label>
                   <textarea
+                    id="review-textarea"
                     rows={3}
                     maxLength={300}
                     placeholder={`How was your experience with ${tutorName.split(" ")[0]}?`}
                     value={body}
                     onChange={(e) => setBody(e.target.value)}
-                    className="w-full resize-none rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm text-gray-800 placeholder:text-gray-400 focus:border-teal-300 focus:outline-none focus:ring-2 focus:ring-teal-100"
+                    className="w-full resize-none rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm text-gray-800 placeholder:text-gray-400 focus:border-amber-300 focus:outline-none focus:ring-2 focus:ring-amber-100"
                   />
                   <p className="text-right text-[10px] text-gray-400">{300 - body.length} left</p>
                 </div>
@@ -849,7 +884,7 @@ function ReviewModal({
                     className="flex-1 rounded-xl border border-gray-200 py-2.5 text-sm font-semibold text-gray-600 hover:bg-gray-50 transition">
                     Cancel
                   </button>
-                  <button onClick={handleSubmit} disabled={rating === 0}
+                  <button onClick={handleSubmit} disabled={rating === 0} aria-disabled={rating === 0}
                     className="flex-1 rounded-xl bg-amber-400 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-amber-500 disabled:opacity-40 disabled:cursor-not-allowed">
                     {existing ? "Update review" : "Submit review"}
                   </button>
@@ -874,16 +909,23 @@ function ProfilePanel({
   onAvatarClick: () => void; setBioInput: (v: string) => void;
   setBioEditing: (v: boolean) => void; saveBio: () => void; onSignOut: () => void;
 }) {
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
+
   if (!isOpen) return null;
   const totalSessions = matches.reduce((a, m) => a + m.sessionCount, 0);
   return (
     <>
       <div className="fixed inset-0 z-40 bg-black/20 backdrop-blur-[1px]" onClick={onClose} />
-      <div className="fixed right-0 top-0 z-50 flex h-full w-80 flex-col bg-white shadow-2xl">
+      <div role="dialog" aria-modal="true" aria-label="My Profile" className="fixed right-0 top-0 z-50 flex h-full w-80 flex-col bg-white shadow-2xl">
         <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4">
           <span className="text-sm font-bold text-gray-700">My Profile</span>
-          <button onClick={onClose} className="flex size-7 items-center justify-center rounded-full text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+          <button onClick={onClose} aria-label="Close profile panel" className="flex size-7 items-center justify-center rounded-full text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition">
+            <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
               <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
             </svg>
           </button>
@@ -891,15 +933,14 @@ function ProfilePanel({
         <div className="flex-1 overflow-y-auto">
           <div className="flex flex-col items-center gap-4 px-6 py-6 border-b border-gray-100">
             <div className="relative group">
-              <div className="size-24 rounded-full overflow-hidden border-2 border-teal-200 shadow-md">
+              <div className="size-24 rounded-full overflow-hidden border-2 border-amber-200 shadow-md">
                 {profilePic
                   ? <img src={profilePic} alt="Profile" className="w-full h-full object-cover" />
-                  : <div className="size-full bg-teal-100 flex items-center justify-center text-2xl font-bold text-teal-700">{initials}</div>
+                  : <div className="size-full bg-amber-100 flex items-center justify-center text-2xl font-bold text-amber-700">{initials}</div>
                 }
               </div>
-              <button onClick={onAvatarClick}
-                className="absolute inset-0 flex items-center justify-center rounded-full bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity text-white"
-                title="Change photo">
+              <button onClick={onAvatarClick} aria-label="Change profile photo"
+                className="absolute inset-0 flex items-center justify-center rounded-full bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity text-white">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
                   <circle cx="12" cy="13" r="4"/>
@@ -907,25 +948,25 @@ function ProfilePanel({
               </button>
             </div>
             <button onClick={onAvatarClick}
-              className="rounded-full border border-teal-300 bg-teal-50 px-4 py-1.5 text-xs font-semibold text-teal-700 hover:bg-teal-100 transition">
+              className="rounded-full border border-amber-300 bg-amber-50 px-4 py-1.5 text-xs font-semibold text-amber-700 hover:bg-amber-100 transition">
               Change photo
             </button>
           </div>
           <div className="px-5 py-5 border-b border-gray-100">
             <div className="mb-2 flex items-center justify-between">
-              <span className="text-xs font-bold uppercase tracking-widest text-teal-600">Bio</span>
+              <span className="text-xs font-bold uppercase tracking-widest text-amber-600">Bio</span>
               {!bioEditing && (
-                <button onClick={() => { setBioInput(bio); setBioEditing(true); }}
-                  className="text-xs font-semibold text-gray-400 hover:text-teal-600 transition">Edit</button>
+                <button onClick={() => { setBioInput(bio); setBioEditing(true); }} aria-label="Edit bio"
+                  className="text-xs font-semibold text-gray-400 hover:text-amber-600 transition">Edit</button>
               )}
             </div>
             {bioEditing ? (
               <div className="space-y-2">
                 <textarea autoFocus value={bioInput} onChange={(e) => setBioInput(e.target.value)}
                   placeholder="Tell your tutor a bit about yourself…" rows={4}
-                  className="w-full resize-none rounded-xl border border-teal-200 bg-teal-50 px-3 py-2.5 text-sm text-gray-800 placeholder:text-gray-400 outline-none focus:border-teal-400 focus:ring-2 focus:ring-teal-100" />
+                  className="w-full resize-none rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-gray-800 placeholder:text-gray-400 outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-100" />
                 <div className="flex gap-2">
-                  <button onClick={saveBio} className="flex-1 rounded-lg bg-teal-500 py-1.5 text-xs font-semibold text-white hover:bg-teal-400 transition">Save</button>
+                  <button onClick={saveBio} className="flex-1 rounded-lg bg-amber-400 py-1.5 text-xs font-semibold text-white hover:bg-amber-300 transition">Save</button>
                   <button onClick={() => setBioEditing(false)} className="flex-1 rounded-lg border border-gray-200 py-1.5 text-xs font-semibold text-gray-600 hover:bg-gray-50 transition">Cancel</button>
                 </div>
               </div>
@@ -936,7 +977,7 @@ function ProfilePanel({
             )}
           </div>
           <div className="px-5 py-5 border-b border-gray-100">
-            <span className="mb-3 block text-xs font-bold uppercase tracking-widest text-teal-600">Statistics</span>
+            <span className="mb-3 block text-xs font-bold uppercase tracking-widest text-amber-600">Statistics</span>
             <div className="grid grid-cols-2 gap-3">
               {[
                 { label: "Tutors", value: matches.length },
@@ -986,6 +1027,8 @@ export default function StudentDashboard() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [reviewTarget, setReviewTarget] = useState<{ matchId: string; tutorId: string; tutorName: string; subject: string } | null>(null);
   const [savedReviews, setSavedReviews] = useState<Record<string, { rating: number; body: string }>>({});
+  const [meetInvites, setMeetInvites] = useState<Record<string, { active: boolean; gmeetUrl: string } | null>>({});
+  const [meetToast, setMeetToast] = useState<{ matchId: string; tutorName: string } | null>(null);
 
   useEffect(() => {
     if (!isLoading && !user) router.replace("/find");
@@ -1100,6 +1143,27 @@ export default function StudentDashboard() {
           });
           return next;
         });
+
+        // Poll meet invites
+        setMeetInvites((prev) => {
+          const next = { ...prev };
+          matches.forEach((m) => {
+            try {
+              const raw = localStorage.getItem(`vt_meet_invite_${m.id}`);
+              if (raw) {
+                const parsed = JSON.parse(raw);
+                const wasActive = prev[m.id]?.active;
+                if (parsed.active && !wasActive) {
+                  setMeetToast({ matchId: m.id, tutorName: m.tutorName });
+                }
+                next[m.id] = { active: parsed.active === true, gmeetUrl: parsed.gmeetUrl ?? "" };
+              } else {
+                next[m.id] = null;
+              }
+            } catch { /* ignore */ }
+          });
+          return next;
+        });
       } catch { /* ignore */ }
     }, 3000);
     return () => clearInterval(interval);
@@ -1109,6 +1173,13 @@ export default function StudentDashboard() {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, activeTutorId]);
+
+  // Auto-dismiss meet toast after 6 seconds
+  useEffect(() => {
+    if (!meetToast) return;
+    const t = setTimeout(() => setMeetToast(null), 6000);
+    return () => clearTimeout(t);
+  }, [meetToast]);
 
   const cancelRequest = useCallback((reqId: string) => {
     try {
@@ -1201,7 +1272,10 @@ export default function StudentDashboard() {
   const TUTOR_COLORS: Array<"amber" | "blue" | "green" | "purple" | "rose" | "teal"> = ["amber", "blue", "green", "purple", "rose", "teal"];
 
   return (
-    <div className="min-h-screen bg-[#f0fafa]">
+    <div className="min-h-screen bg-[#fffbeb]">
+      <a href="#main-content" className="sr-only focus:not-sr-only focus:absolute focus:z-[100] focus:top-3 focus:left-3 focus:rounded-lg focus:bg-amber-500 focus:px-4 focus:py-2 focus:text-sm focus:font-semibold focus:text-white focus:shadow-lg">
+        Skip to main content
+      </a>
       <input ref={avatarInputRef} type="file" accept="image/*" className="hidden" onChange={handleAvatarFileChange} />
 
       {reviewTarget && (
@@ -1213,6 +1287,40 @@ export default function StudentDashboard() {
           onSubmit={(rating, body) => { submitReview(rating, body); }}
         />
       )}
+
+      {/* Meet invite toast */}
+      {meetToast && (() => {
+        const invite = meetInvites[meetToast.matchId];
+        return (
+          <div
+            role="alert"
+            aria-live="assertive"
+            className="fixed bottom-6 right-6 z-[100] flex items-center gap-3 rounded-2xl border border-emerald-200 bg-white px-5 py-4 shadow-2xl animate-in slide-in-from-bottom-4"
+            style={{ animation: "slideUp 0.3s ease-out" }}
+          >
+            <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-emerald-100 border border-emerald-200">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#16a34a" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M15 10l4.553-2.669A1 1 0 0121 8.232v7.536a1 1 0 01-1.447.9L15 14"/><rect x="1" y="6" width="14" height="12" rx="2"/>
+              </svg>
+            </span>
+            <div className="min-w-0">
+              <p className="text-sm font-bold text-gray-900">{meetToast.tutorName} started a Meet!</p>
+              <p className="text-xs text-gray-500">Your tutor is ready for you</p>
+            </div>
+            <button
+              onClick={() => { if (invite?.gmeetUrl) window.open(invite.gmeetUrl, "_blank", "noopener,noreferrer"); setMeetToast(null); }}
+              className="ml-2 shrink-0 rounded-xl bg-emerald-500 px-4 py-2 text-xs font-bold text-white transition hover:bg-emerald-400"
+            >
+              Join Now
+            </button>
+            <button onClick={() => setMeetToast(null)} aria-label="Dismiss" className="shrink-0 text-gray-300 hover:text-gray-500 transition">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+              </svg>
+            </button>
+          </div>
+        );
+      })()}
 
       <ProfilePanel
         isOpen={profileOpen}
@@ -1231,7 +1339,7 @@ export default function StudentDashboard() {
       />
 
       {/* Navbar */}
-      <nav className="sticky top-0 z-50 border-b border-black/10 bg-[#f7b801]">
+      <nav aria-label="Main navigation" className="sticky top-0 z-50 border-b border-black/10 bg-[#f7b801]">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-2">
           <Link href="/find/dashboard" className="flex items-center">
             <Image src="/Guide_app_logo.png" alt="VolunTutor" width={160} height={56} className="h-14 w-auto object-contain mix-blend-multiply" priority />
@@ -1240,7 +1348,7 @@ export default function StudentDashboard() {
             <span className="hidden text-sm font-medium text-gray-800 sm:block">
               Hello, {user.name.split(" ")[0]} 👋
             </span>
-            <Avatar initials={initials} src={profilePic} size="sm" color="teal" onClick={() => setProfileOpen(true)} />
+            <Avatar initials={initials} src={profilePic} size="sm" color="amber" onClick={() => setProfileOpen(true)} ariaLabel="Open profile panel" />
           </div>
         </div>
       </nav>
@@ -1249,17 +1357,17 @@ export default function StudentDashboard() {
         <div className="flex flex-col gap-8 lg:flex-row lg:items-start">
 
           {/* Sidebar */}
-          <aside className="w-full lg:w-72 xl:w-80 shrink-0 space-y-5">
+          <aside aria-label="Student information" className="w-full lg:w-72 xl:w-80 shrink-0 space-y-5">
 
             {/* Profile card */}
             <div className="rounded-2xl border border-black/10 bg-white p-6 shadow-sm">
               <div className="flex flex-col items-center gap-3 text-center">
-                <Avatar initials={initials} src={profilePic} size="lg" color="teal" onClick={() => setProfileOpen(true)} />
+                <Avatar initials={initials} src={profilePic} size="lg" color="amber" onClick={() => setProfileOpen(true)} />
                 <div>
                   <h2 className="text-lg font-bold text-gray-900">{user.name}</h2>
                   <p className="text-sm text-gray-500">{user.email}</p>
-                  <span className="mt-1.5 inline-flex items-center gap-1 rounded-full bg-teal-50 border border-teal-200 px-2.5 py-0.5 text-xs font-semibold text-teal-700">
-                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <span className="mt-1.5 inline-flex items-center gap-1 rounded-full bg-amber-50 border border-amber-200 px-2.5 py-0.5 text-xs font-semibold text-amber-700">
+                    <svg aria-hidden="true" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                       <path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/>
                     </svg>
                     Student
@@ -1274,7 +1382,7 @@ export default function StudentDashboard() {
 
             {/* My Subjects */}
             <div className="rounded-2xl border border-black/10 bg-white p-5 shadow-sm">
-              <h3 className="mb-4 text-xs font-bold uppercase tracking-widest text-teal-600">My Subjects</h3>
+              <h3 className="mb-4 text-xs font-bold uppercase tracking-widest text-amber-600">My Subjects</h3>
               {mySubjects.length === 0 ? (
                 <p className="text-xs text-gray-400 italic">No requests submitted yet.</p>
               ) : (
@@ -1287,7 +1395,7 @@ export default function StudentDashboard() {
                   ))}
                 </div>
               )}
-              <Link href="/find" className="mt-4 flex items-center gap-1.5 text-xs font-semibold text-teal-600 hover:text-teal-500 transition">
+              <Link href="/find" className="mt-4 flex items-center gap-1.5 text-xs font-semibold text-amber-600 hover:text-amber-500 transition">
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                   <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/>
                 </svg>
@@ -1297,7 +1405,7 @@ export default function StudentDashboard() {
 
             {/* Weekly Schedule (read-only) */}
             <div className="rounded-2xl border border-black/10 bg-white p-5 shadow-sm">
-              <h3 className="mb-3 text-xs font-bold uppercase tracking-widest text-teal-600">My Class Schedule</h3>
+              <h3 className="mb-3 text-xs font-bold uppercase tracking-widest text-amber-600">My Class Schedule</h3>
               {tutorMatches.length === 0 ? (
                 <p className="text-xs text-gray-400 italic">No booked sessions yet. Once a tutor accepts your request, sessions will appear here.</p>
               ) : (
@@ -1307,12 +1415,12 @@ export default function StudentDashboard() {
           </aside>
 
           {/* Main */}
-          <main className="min-w-0 flex-1 space-y-6">
+          <main id="main-content" className="min-w-0 flex-1 space-y-6">
 
             {/* Request a tutor CTA */}
             <Link
               href="/find"
-              className="flex items-center justify-between gap-4 rounded-2xl border border-teal-200 bg-teal-500 px-6 py-4 shadow-sm transition hover:bg-teal-400 group"
+              className="flex items-center justify-between gap-4 rounded-2xl border border-amber-200 bg-amber-400 px-6 py-4 shadow-sm transition hover:bg-amber-300 group"
             >
               <div className="flex items-center gap-3">
                 <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-white/20">
@@ -1322,43 +1430,57 @@ export default function StudentDashboard() {
                 </div>
                 <div>
                   <p className="text-sm font-bold text-white">Request a VolunTutor</p>
-                  <p className="text-xs text-teal-100">Submit a new tutor request for any subject</p>
+                  <p className="text-xs text-amber-100">Submit a new tutor request for any subject</p>
                 </div>
               </div>
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 opacity-70 group-hover:translate-x-1 transition-transform">
+              <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 opacity-70 group-hover:translate-x-1 transition-transform">
                 <path d="M5 12h14M12 5l7 7-7 7"/>
               </svg>
             </Link>
 
             {/* Tabs */}
-            <div className="flex flex-wrap items-center gap-1 rounded-xl border border-black/10 bg-white p-1.5 shadow-sm w-fit">
+            <div role="tablist" aria-label="Dashboard sections" className="flex flex-wrap items-center gap-1 rounded-xl border border-black/10 bg-white p-1.5 shadow-sm w-fit">
               {([
                 { id: "search",   label: "Search VolunTutor", badge: 0 },
                 { id: "tutors",   label: "My Tutors",         badge: 0 },
                 { id: "requests", label: "My Requests",       badge: pendingCount },
                 { id: "messages", label: "Messages",          badge: 0 },
               ] as const).map(({ id, label, badge }) => (
-                <button key={id} onClick={() => setActiveTab(id)}
-                  className={`relative rounded-lg px-5 py-2 text-sm font-semibold transition ${activeTab === id ? "bg-teal-500 text-white shadow-sm" : "text-gray-500 hover:text-gray-800"}`}>
+                <button
+                  key={id}
+                  role="tab"
+                  aria-selected={activeTab === id}
+                  aria-controls={`tabpanel-${id}`}
+                  id={`tab-${id}`}
+                  onClick={() => setActiveTab(id)}
+                  className={`relative rounded-lg px-5 py-2 text-sm font-semibold transition ${activeTab === id ? "bg-amber-400 text-white shadow-sm" : "text-gray-500 hover:text-gray-800"}`}>
                   {label}
                   {badge > 0 && (
-                    <span className={`absolute -right-1.5 -top-1.5 flex size-5 items-center justify-center rounded-full text-[10px] font-bold ${activeTab === id ? "bg-white text-teal-600" : "bg-teal-500 text-white"}`}>
-                      {badge}
-                    </span>
+                    <>
+                      <span aria-hidden="true" className={`absolute -right-1.5 -top-1.5 flex size-5 items-center justify-center rounded-full text-[10px] font-bold ${activeTab === id ? "bg-white text-amber-600" : "bg-amber-400 text-white"}`}>
+                        {badge}
+                      </span>
+                      <span className="sr-only">({badge} pending)</span>
+                    </>
                   )}
                 </button>
               ))}
             </div>
 
             {/* Search tab */}
-            {activeTab === "search" && <SearchVolunTutor />}
+            {activeTab === "search" && (
+              <div role="tabpanel" id="tabpanel-search" aria-labelledby="tab-search">
+                <SearchVolunTutor />
+              </div>
+            )}
 
             {/* My Tutors tab */}
             {activeTab === "tutors" && (
+              <div role="tabpanel" id="tabpanel-tutors" aria-labelledby="tab-tutors">
               <div className="space-y-4">
                 {tutorMatches.length === 0 && (
                   <div className="flex flex-col items-center gap-4 rounded-2xl border border-dashed border-gray-200 bg-white py-16 text-center">
-                    <div className="flex size-14 items-center justify-center rounded-full bg-teal-50 border border-teal-100">
+                    <div className="flex size-14 items-center justify-center rounded-full bg-amber-50 border border-amber-100">
                       <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#0d9488" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                         <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/>
                         <path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
@@ -1369,7 +1491,7 @@ export default function StudentDashboard() {
                       <p className="mt-1 text-sm text-gray-400">Once a tutor accepts one of your requests, they'll appear here.</p>
                     </div>
                     <Link href="/find"
-                      className="rounded-full bg-teal-500 px-6 py-2.5 text-sm font-semibold text-white hover:bg-teal-400 transition shadow-sm">
+                      className="rounded-full bg-amber-400 px-6 py-2.5 text-sm font-semibold text-white hover:bg-amber-300 transition shadow-sm">
                       Find a tutor →
                     </Link>
                   </div>
@@ -1410,12 +1532,34 @@ export default function StudentDashboard() {
                       <div className="flex shrink-0 flex-col gap-2">
                         <button
                           onClick={() => { setActiveTutorId(match.id); setActiveTab("messages"); }}
-                          className="flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-semibold text-gray-600 transition hover:bg-teal-50 hover:border-teal-200 hover:text-teal-700">
-                          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          className="flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-semibold text-gray-600 transition hover:bg-amber-50 hover:border-amber-200 hover:text-amber-700">
+                          <svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                             <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
                           </svg>
                           Message
                         </button>
+                        {(() => {
+                          const invite = meetInvites[match.id];
+                          const canJoin = invite?.active && !!invite?.gmeetUrl;
+                          return (
+                            <button
+                              disabled={!canJoin}
+                              onClick={() => canJoin && window.open(invite!.gmeetUrl, "_blank", "noopener,noreferrer")}
+                              title={canJoin ? "Join your tutor's Google Meet" : "Waiting for tutor to start the session"}
+                              className={`relative flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-semibold transition ${
+                                canJoin
+                                  ? "border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 cursor-pointer"
+                                  : "border-gray-200 bg-white text-gray-300 cursor-not-allowed"
+                              }`}
+                            >
+                              {canJoin && <span className="absolute left-2.5 top-1/2 -translate-y-1/2 size-2 rounded-full bg-emerald-400 animate-pulse" />}
+                              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={canJoin ? "ml-3" : ""}>
+                                <path d="M15 10l4.553-2.669A1 1 0 0121 8.232v7.536a1 1 0 01-1.447.9L15 14"/><rect x="1" y="6" width="14" height="12" rx="2"/>
+                              </svg>
+                              Join Meet
+                            </button>
+                          );
+                        })()}
                         {(() => {
                           const review = savedReviews[match.id];
                           return (
@@ -1426,7 +1570,7 @@ export default function StudentDashboard() {
                                   ? "border-amber-200 bg-amber-50 text-amber-600 hover:bg-amber-100"
                                   : "border-gray-200 bg-white text-gray-600 hover:bg-amber-50 hover:border-amber-200 hover:text-amber-600"
                               }`}>
-                              <svg width="15" height="15" viewBox="0 0 24 24"
+                              <svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24"
                                 fill={review ? "#f59e0b" : "none"}
                                 stroke={review ? "#f59e0b" : "currentColor"}
                                 strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -1446,10 +1590,10 @@ export default function StudentDashboard() {
                     {/* Booked slots summary */}
                     {match.bookedSlots.length > 0 && (
                       <div className="mt-4 border-t border-gray-100 pt-4">
-                        <p className="mb-2 text-[11px] font-bold uppercase tracking-widest text-teal-600">Booked sessions</p>
+                        <p className="mb-2 text-[11px] font-bold uppercase tracking-widest text-amber-600">Booked sessions</p>
                         <div className="flex flex-wrap gap-2">
                           {match.bookedSlots.slice(0, 4).map((slot) => (
-                            <span key={slot} className="rounded-lg bg-teal-50 border border-teal-100 px-2.5 py-1 text-xs font-medium text-teal-700">
+                            <span key={slot} className="rounded-lg bg-amber-50 border border-amber-100 px-2.5 py-1 text-xs font-medium text-amber-700">
                               {slotKeyToLabel(slot)}
                             </span>
                           ))}
@@ -1464,14 +1608,16 @@ export default function StudentDashboard() {
                   </div>
                 ))}
               </div>
+              </div>
             )}
 
             {/* My Requests tab */}
             {activeTab === "requests" && (
+              <div role="tabpanel" id="tabpanel-requests" aria-labelledby="tab-requests">
               <div className="space-y-4">
                 {myRequests.length === 0 && (
                   <div className="flex flex-col items-center gap-4 rounded-2xl border border-dashed border-gray-200 bg-white py-16 text-center">
-                    <div className="flex size-14 items-center justify-center rounded-full bg-teal-50 border border-teal-100">
+                    <div className="flex size-14 items-center justify-center rounded-full bg-amber-50 border border-amber-100">
                       <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#0d9488" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                         <circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/>
                       </svg>
@@ -1481,7 +1627,7 @@ export default function StudentDashboard() {
                       <p className="mt-1 text-sm text-gray-400">Submit a request to find a volunteer tutor.</p>
                     </div>
                     <Link href="/find"
-                      className="rounded-full bg-teal-500 px-6 py-2.5 text-sm font-semibold text-white hover:bg-teal-400 transition shadow-sm">
+                      className="rounded-full bg-amber-400 px-6 py-2.5 text-sm font-semibold text-white hover:bg-amber-300 transition shadow-sm">
                       Find a tutor →
                     </Link>
                   </div>
@@ -1489,7 +1635,7 @@ export default function StudentDashboard() {
                 {myRequests.map((req) => (
                   <div key={req.id} className="rounded-2xl border border-black/10 bg-white p-6 shadow-sm">
                     <div className="flex items-start gap-4">
-                      <Avatar initials={req.avatar} size="md" color="teal" />
+                      <Avatar initials={req.avatar} size="md" color="amber" />
                       <div className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-center gap-2">
                           <h4 className="font-bold text-gray-900">{req.subject}</h4>
@@ -1551,15 +1697,17 @@ export default function StudentDashboard() {
                   </div>
                 ))}
               </div>
+              </div>
             )}
 
             {/* Messages tab */}
             {activeTab === "messages" && (
+              <div role="tabpanel" id="tabpanel-messages" aria-labelledby="tab-messages">
               <div className="flex h-[600px] overflow-hidden rounded-2xl border border-black/10 bg-white shadow-sm">
                 {/* Tutor list */}
                 <div className="w-56 shrink-0 border-r border-gray-100 flex flex-col">
                   <div className="border-b border-gray-100 px-4 py-3">
-                    <p className="text-xs font-bold uppercase tracking-widest text-teal-600">Tutors</p>
+                    <p className="text-xs font-bold uppercase tracking-widest text-amber-600">Tutors</p>
                   </div>
                   <div className="flex-1 overflow-y-auto">
                     {tutorMatches.length === 0 ? (
@@ -1567,7 +1715,7 @@ export default function StudentDashboard() {
                     ) : (
                       tutorMatches.map((m, idx) => (
                         <button key={m.id} onClick={() => setActiveTutorId(m.id)}
-                          className={`flex w-full items-center gap-3 px-4 py-3 text-left transition ${activeTutorId === m.id ? "bg-teal-50 border-r-2 border-teal-400" : "hover:bg-gray-50"}`}>
+                          className={`flex w-full items-center gap-3 px-4 py-3 text-left transition ${activeTutorId === m.id ? "bg-amber-50 border-r-2 border-amber-400" : "hover:bg-gray-50"}`}>
                           <Avatar initials={m.tutorAvatar} size="sm" color={TUTOR_COLORS[idx % TUTOR_COLORS.length]} />
                           <div className="min-w-0">
                             <p className="truncate text-sm font-semibold text-gray-800">{m.tutorName}</p>
@@ -1584,19 +1732,43 @@ export default function StudentDashboard() {
                   {activeTutor ? (
                     <>
                       <div className="flex items-center gap-3 border-b border-gray-100 px-5 py-3">
-                        <Avatar initials={activeTutor.tutorAvatar} size="sm" color="teal" />
+                        <Avatar initials={activeTutor.tutorAvatar} size="sm" color="amber" />
                         <div>
                           <p className="text-sm font-bold text-gray-900">{activeTutor.tutorName}</p>
                           <p className="text-xs text-gray-400">{activeTutor.subject} · Volunteer Tutor</p>
                         </div>
+                        {(() => {
+                          const invite = meetInvites[activeTutor.id];
+                          const canJoin = invite?.active && !!invite?.gmeetUrl;
+                          return (
+                            <button
+                              disabled={!canJoin}
+                              onClick={() => canJoin && window.open(invite!.gmeetUrl, "_blank", "noopener,noreferrer")}
+                              title={canJoin ? "Join your tutor's Google Meet" : "No active meet session"}
+                              className={`relative ml-auto flex items-center gap-2 rounded-xl border px-3 py-2 text-xs font-semibold transition ${
+                                canJoin
+                                  ? "border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 cursor-pointer"
+                                  : "border-gray-200 bg-white text-gray-300 cursor-not-allowed"
+                              }`}
+                            >
+                              {canJoin && <span className="absolute left-2 top-1/2 -translate-y-1/2 size-1.5 rounded-full bg-emerald-400 animate-pulse" />}
+                              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={canJoin ? "ml-2" : ""}>
+                                <path d="M15 10l4.553-2.669A1 1 0 0121 8.232v7.536a1 1 0 01-1.447.9L15 14"/><rect x="1" y="6" width="14" height="12" rx="2"/>
+                              </svg>
+                              Join Meet
+                            </button>
+                          );
+                        })()}
                       </div>
-                      <div className="flex-1 overflow-y-auto space-y-3 px-5 py-4">
+                      <div role="log" aria-label="Message thread" aria-live="polite" className="flex-1 overflow-y-auto space-y-3 px-5 py-4">
                         {(messages[activeTutor.id] ?? []).length === 0 && (
                           <p className="text-center text-sm text-gray-400 mt-8">No messages yet. Say hello to your tutor!</p>
                         )}
                         {(messages[activeTutor.id] ?? []).map((msg, i) => (
                           <div key={i} className={`flex ${msg.from === "student" ? "justify-end" : "justify-start"}`}>
-                            <div className={`max-w-xs rounded-2xl px-4 py-2.5 text-sm ${msg.from === "student" ? "bg-teal-500 text-white rounded-br-sm" : "bg-gray-100 text-gray-800 rounded-bl-sm"}`}>
+                            <div
+                              aria-label={msg.from === "student" ? `You said: ${msg.body}` : `${activeTutor?.tutorName ?? 'Tutor'} said: ${msg.body}`}
+                              className={`max-w-xs rounded-2xl px-4 py-2.5 text-sm ${msg.from === "student" ? "bg-amber-400 text-white rounded-br-sm" : "bg-gray-100 text-gray-800 rounded-bl-sm"}`}>
                               {msg.body}
                             </div>
                           </div>
@@ -1606,15 +1778,16 @@ export default function StudentDashboard() {
                       <div className="flex items-center gap-2 border-t border-gray-100 px-4 py-3">
                         <input
                           type="text"
+                          aria-label={`Message ${activeTutor?.tutorName ?? 'your tutor'}`}
                           placeholder="Message your tutor…"
                           value={messageInput}
                           onChange={(e) => setMessageInput(e.target.value)}
                           onKeyDown={(e) => e.key === "Enter" && sendMessage()}
-                          className="flex-1 rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 outline-none focus:border-teal-400 focus:ring-2 focus:ring-teal-100"
+                          className="flex-1 rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-100"
                         />
-                        <button onClick={sendMessage}
-                          className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-teal-500 text-white transition hover:bg-teal-400">
-                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                        <button onClick={sendMessage} aria-label="Send message"
+                          className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-amber-400 text-white transition hover:bg-amber-300">
+                          <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                             <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
                           </svg>
                         </button>
@@ -1622,7 +1795,7 @@ export default function StudentDashboard() {
                     </>
                   ) : (
                     <div className="flex flex-1 flex-col items-center justify-center gap-3 text-center px-8">
-                      <div className="flex size-14 items-center justify-center rounded-full bg-teal-50 border border-teal-100">
+                      <div className="flex size-14 items-center justify-center rounded-full bg-amber-50 border border-amber-100">
                         <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#0d9488" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                           <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
                         </svg>
@@ -1631,6 +1804,7 @@ export default function StudentDashboard() {
                     </div>
                   )}
                 </div>
+              </div>
               </div>
             )}
           </main>

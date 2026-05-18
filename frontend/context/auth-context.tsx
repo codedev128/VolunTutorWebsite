@@ -56,6 +56,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const users: StoredUser[] = JSON.parse(localStorage.getItem("vt_users") || "[]");
     const found = users.find((u) => u.email === email && u.password === password);
     if (!found) return { ok: false, error: "Incorrect email or password." };
+    if (localStorage.getItem(`vt_banned_${found.id}`)) {
+      return { ok: false, error: "Your account has been suspended. Please contact support." };
+    }
     const { password: _pw, ...session } = found;
     localStorage.setItem("vt_session", JSON.stringify(session));
     setUser(session);
