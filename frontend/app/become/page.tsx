@@ -17,6 +17,7 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useAuth } from "@/context/auth-context";
 import { validateEmail, verifyEmailDomain } from "@/lib/email-validation";
+import { generateOTP, storeOTP, verifyOTP, sendOTP } from "@/lib/otp";
 
 function BrandMark() {
   return (
@@ -52,15 +53,28 @@ function AmberButton({ children, onClick, disabled }: { children: React.ReactNod
 function SignUpDialog() {
   const id = useId();
   const router = useRouter();
-  const [name, setName]           = useState("");
-  const [email, setEmail]         = useState("");
-  const [password, setPassword]   = useState("");
-  const [confirm, setConfirm]     = useState("");
-  const [cvFile, setCvFile]       = useState<File | null>(null);
+  const [step, setStep]             = useState<"form" | "otp">("form");
+  const [name, setName]             = useState("");
+  const [email, setEmail]           = useState("");
+  const [password, setPassword]     = useState("");
+  const [confirm, setConfirm]       = useState("");
+  const [cvFile, setCvFile]         = useState<File | null>(null);
+  const [pendingCvDataUrl, setPendingCvDataUrl] = useState("");
   const [error, setError]           = useState("");
   const [suggestion, setSuggestion] = useState("");
   const [verifying, setVerifying]   = useState(false);
+  const [sending, setSending]       = useState(false);
   const [loading, setLoading]       = useState(false);
+  const [enteredOtp, setEnteredOtp] = useState("");
+  const [otpError, setOtpError]     = useState("");
+  const [cooldown, setCooldown]     = useState(0);
+  const [devOtp, setDevOtp]         = useState("");
+
+  useEffect(() => {
+    if (cooldown <= 0) return;
+    const t = setTimeout(() => setCooldown((c) => c - 1), 1000);
+    return () => clearTimeout(t);
+  }, [cooldown]);
 
   async function handleSignUp(ignoreSuggestion = false) {
     setError("");
@@ -72,12 +86,8 @@ function SignUpDialog() {
     const emailCheck = validateEmail(email);
     if (!emailCheck.ok) { setError(emailCheck.error!); return; }
     if (!ignoreSuggestion && emailCheck.suggestion) { setSuggestion(emailCheck.suggestion); return; }
-    if (password.length < 8) {
-      setError("Password must be at least 8 characters."); return;
-    }
-    if (password !== confirm) {
-      setError("Passwords do not match."); return;
-    }
+    if (password.length < 8) { setError("Password must be at least 8 characters."); return; }
+    if (password !== confirm) { setError("Passwords do not match."); return; }
     // Check for duplicate application or account
     try {
       const apps: { email: string; status: string; reviewNote?: string }[] =
@@ -102,21 +112,47 @@ function SignUpDialog() {
     const domainCheck = await verifyEmailDomain(email);
     setVerifying(false);
     if (!domainCheck.ok) { setError(domainCheck.error!); return; }
-    setLoading(true);
+    // Pre-read CV so it's ready after OTP verification
     try {
-      const cvDataUrl = await new Promise<string>((resolve, reject) => {
+      const dataUrl = await new Promise<string>((resolve, reject) => {
         const reader = new FileReader();
         reader.onload = () => resolve(reader.result as string);
         reader.onerror = () => reject(new Error("File read failed"));
         reader.readAsDataURL(cvFile);
       });
+      setPendingCvDataUrl(dataUrl);
+    } catch {
+      setError("Failed to read CV file. Please try a different file."); return;
+    }
+    await dispatchOTP();
+  }
+
+  async function dispatchOTP() {
+    setSending(true);
+    const otp = generateOTP();
+    storeOTP(email.trim().toLowerCase(), otp);
+    const result = await sendOTP(email.trim(), name.trim(), otp);
+    setSending(false);
+    if (!result.ok) { setError(result.error ?? "Failed to send code."); return; }
+    setDevOtp(result.devMode ? otp : "");
+    setEnteredOtp("");
+    setOtpError("");
+    setCooldown(60);
+    setStep("otp");
+  }
+
+  function handleVerifyOTP() {
+    const result = verifyOTP(email.trim().toLowerCase(), enteredOtp);
+    if (!result.ok) { setOtpError(result.error!); return; }
+    setLoading(true);
+    try {
       const app = {
         id: Date.now().toString(),
         name: name.trim(),
         email: email.trim().toLowerCase(),
         password,
-        cvFileName: cvFile.name,
-        cvDataUrl,
+        cvFileName: cvFile?.name ?? "cv",
+        cvDataUrl: pendingCvDataUrl,
         status: "pending",
         submittedAt: new Date().toISOString(),
       };
@@ -126,13 +162,13 @@ function SignUpDialog() {
       localStorage.setItem("vt_pending_email", app.email);
       router.push("/become/pending");
     } catch {
-      setError("Failed to read CV file. Please try a different file.");
+      setOtpError("Failed to submit application. Please try again.");
       setLoading(false);
     }
   }
 
   return (
-    <Dialog>
+    <Dialog onOpenChange={() => { setStep("form"); setError(""); setEnteredOtp(""); setDevOtp(""); }}>
       <DialogTrigger asChild>
         <button className="w-full rounded-full bg-gray-900 px-8 py-3.5 text-sm font-semibold text-white shadow-md transition hover:-translate-y-0.5 hover:bg-gray-700 active:translate-y-0">
           Apply to become a VolunTutor →
@@ -142,96 +178,135 @@ function SignUpDialog() {
         <div className="flex flex-col items-center gap-2">
           <BrandMark />
           <DialogHeader>
-            <DialogTitle className="sm:text-center">Apply to become a VolunTutor</DialogTitle>
+            <DialogTitle className="sm:text-center">
+              {step === "otp" ? "Check your inbox" : "Apply to become a VolunTutor"}
+            </DialogTitle>
             <DialogDescription className="sm:text-center">
-              Submit your application — a moderator will review your CV and approve your account.
+              {step === "otp"
+                ? `We sent a 6-digit code to ${email}`
+                : "Submit your application — a moderator will review your CV and approve your account."}
             </DialogDescription>
           </DialogHeader>
         </div>
-        <div className="space-y-5">
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor={`${id}-name`}>Full name</Label>
-              <Input id={`${id}-name`} placeholder="Jane Smith" type="text" value={name} onChange={(e) => setName(e.target.value)} />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor={`${id}-email`}>Email</Label>
-              <Input id={`${id}-email`} placeholder="jane@example.com" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor={`${id}-password`}>Password</Label>
-              <Input id={`${id}-password`} placeholder="At least 8 characters" type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor={`${id}-confirm`}>Confirm password</Label>
-              <Input id={`${id}-confirm`} placeholder="Repeat your password" type="password" value={confirm} onChange={(e) => setConfirm(e.target.value)} />
-            </div>
-            <div className="space-y-2">
-              <Label>CV / Resume <span className="text-red-500 ml-0.5">*</span></Label>
-              <label
-                htmlFor={`${id}-cv`}
-                className={`flex cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed py-5 px-3 text-center transition ${
-                  cvFile ? "border-amber-300 bg-amber-50" : "border-gray-200 hover:border-amber-300 hover:bg-amber-50/50"
-                }`}
-              >
-                {cvFile ? (
-                  <div className="flex items-center gap-2 text-sm font-medium text-amber-700">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>
-                    </svg>
-                    <span className="truncate max-w-[180px]">{cvFile.name}</span>
-                    <button type="button" onClick={(e) => { e.preventDefault(); setCvFile(null); }}
-                      className="ml-1 text-amber-400 hover:text-amber-600 text-lg leading-none">×</button>
-                  </div>
-                ) : (
-                  <>
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#d1d5db" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
-                    </svg>
-                    <div>
-                      <p className="text-sm font-medium text-gray-600">Click to upload your CV</p>
-                      <p className="text-xs text-gray-400 mt-0.5">PDF, DOC, DOCX, or image</p>
+
+        {/* ── Step 1: Form ── */}
+        {step === "form" && (
+          <div className="space-y-5">
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor={`${id}-name`}>Full name</Label>
+                <Input id={`${id}-name`} placeholder="Jane Smith" type="text" value={name} onChange={(e) => setName(e.target.value)} />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor={`${id}-email`}>Email</Label>
+                <Input id={`${id}-email`} placeholder="jane@example.com" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor={`${id}-password`}>Password</Label>
+                <Input id={`${id}-password`} placeholder="At least 8 characters" type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor={`${id}-confirm`}>Confirm password</Label>
+                <Input id={`${id}-confirm`} placeholder="Repeat your password" type="password" value={confirm} onChange={(e) => setConfirm(e.target.value)} />
+              </div>
+              <div className="space-y-2">
+                <Label>CV / Resume <span className="text-red-500 ml-0.5">*</span></Label>
+                <label
+                  htmlFor={`${id}-cv`}
+                  className={`flex cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed py-5 px-3 text-center transition ${
+                    cvFile ? "border-amber-300 bg-amber-50" : "border-gray-200 hover:border-amber-300 hover:bg-amber-50/50"
+                  }`}
+                >
+                  {cvFile ? (
+                    <div className="flex items-center gap-2 text-sm font-medium text-amber-700">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>
+                      </svg>
+                      <span className="truncate max-w-[180px]">{cvFile.name}</span>
+                      <button type="button" onClick={(e) => { e.preventDefault(); setCvFile(null); }}
+                        className="ml-1 text-amber-400 hover:text-amber-600 text-lg leading-none">×</button>
                     </div>
-                  </>
-                )}
-                <input
-                  id={`${id}-cv`}
-                  type="file"
-                  accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,image/*,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                  className="hidden"
-                  onChange={(e) => setCvFile(e.target.files?.[0] ?? null)}
-                />
-              </label>
+                  ) : (
+                    <>
+                      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#d1d5db" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
+                      </svg>
+                      <div>
+                        <p className="text-sm font-medium text-gray-600">Click to upload your CV</p>
+                        <p className="text-xs text-gray-400 mt-0.5">PDF, DOC, DOCX, or image</p>
+                      </div>
+                    </>
+                  )}
+                  <input id={`${id}-cv`} type="file"
+                    accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,image/*,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                    className="hidden" onChange={(e) => setCvFile(e.target.files?.[0] ?? null)} />
+                </label>
+              </div>
+            </div>
+            {suggestion && (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-800">
+                Did you mean{" "}
+                <button type="button" className="font-semibold underline hover:no-underline"
+                  onClick={() => { setEmail(suggestion); setSuggestion(""); }}>{suggestion}</button>
+                ?{" "}
+                <button type="button" className="ml-1 text-amber-600 hover:text-amber-800"
+                  onClick={() => { setSuggestion(""); handleSignUp(true); }}>No, keep it</button>
+              </div>
+            )}
+            {error && <p className="rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-sm text-red-600">{error}</p>}
+            <AmberButton onClick={() => handleSignUp()} disabled={verifying || sending}>
+              {verifying ? "Verifying email…" : sending ? "Sending code…" : "Continue →"}
+            </AmberButton>
+            <p className="text-center text-xs text-muted-foreground">
+              By applying you agree to our <a className="underline hover:no-underline" href="#">Terms</a>.
+            </p>
+          </div>
+        )}
+
+        {/* ── Step 2: OTP ── */}
+        {step === "otp" && (
+          <div className="space-y-5">
+            <div className="flex justify-center">
+              <div className="flex size-14 items-center justify-center rounded-full bg-amber-100 border border-amber-200">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/>
+                </svg>
+              </div>
+            </div>
+            {devOtp && (
+              <div className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2.5 text-center text-sm">
+                <span className="text-blue-600 font-medium">Dev mode — EmailJS not configured.</span>
+                <br />
+                <span className="text-blue-500 text-xs">Your code: </span>
+                <span className="font-mono font-bold text-blue-800 text-base tracking-widest">{devOtp}</span>
+              </div>
+            )}
+            <div className="space-y-2">
+              <Label htmlFor={`${id}-otp`}>Verification code</Label>
+              <Input id={`${id}-otp`} placeholder="000000" maxLength={6} value={enteredOtp}
+                onChange={(e) => { setEnteredOtp(e.target.value.replace(/\D/g, "").slice(0, 6)); setOtpError(""); }}
+                onKeyDown={(e) => e.key === "Enter" && enteredOtp.length === 6 && handleVerifyOTP()}
+                className="text-center text-2xl font-mono tracking-[0.5em] py-3" />
+              <p className="text-xs text-muted-foreground">Check your spam folder if you don't see it.</p>
+            </div>
+            {otpError && <p className="rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-sm text-red-600">{otpError}</p>}
+            <AmberButton onClick={handleVerifyOTP} disabled={enteredOtp.length !== 6 || loading}>
+              {loading ? "Submitting application…" : "Verify & Submit Application"}
+            </AmberButton>
+            <div className="flex items-center justify-between text-xs text-gray-400">
+              <button type="button" onClick={() => { setStep("form"); setEnteredOtp(""); setOtpError(""); }}
+                className="hover:text-gray-600 transition">← Back</button>
+              {cooldown > 0 ? (
+                <span>Resend in {cooldown}s</span>
+              ) : (
+                <button type="button" onClick={dispatchOTP} disabled={sending}
+                  className="text-amber-600 hover:underline disabled:opacity-50">
+                  {sending ? "Sending…" : "Resend code"}
+                </button>
+              )}
             </div>
           </div>
-          {suggestion && (
-            <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-800">
-              Did you mean{" "}
-              <button
-                type="button"
-                className="font-semibold underline hover:no-underline"
-                onClick={() => { setEmail(suggestion); setSuggestion(""); }}
-              >
-                {suggestion}
-              </button>
-              ?{" "}
-              <button
-                type="button"
-                className="ml-1 text-amber-600 hover:text-amber-800"
-                onClick={() => { setSuggestion(""); handleSignUp(true); }}
-              >
-                No, keep it
-              </button>
-            </div>
-          )}
-          {error && <p className="rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-sm text-red-600">{error}</p>}
-          <AmberButton onClick={() => handleSignUp()} disabled={verifying || loading}>
-            {verifying ? "Verifying email…" : loading ? "Submitting application…" : "Submit application"}
-          </AmberButton>
-        </div>
-        <p className="text-center text-xs text-muted-foreground">
-          By applying you agree to our <a className="underline hover:no-underline" href="#">Terms</a>.
-        </p>
+        )}
       </DialogContent>
     </Dialog>
   );
