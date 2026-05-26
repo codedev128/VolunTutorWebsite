@@ -18,7 +18,6 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { useAuth } from "@/context/auth-context";
 import { validateEmail, verifyEmailDomain } from "@/lib/email-validation";
 import { generateOTP, storeOTP, verifyOTP, sendOTP } from "@/lib/otp";
-import { ShineBorder } from "@/components/ui/shine-border";
 
 function BrandMark() {
   return (
@@ -454,27 +453,27 @@ export default function BecomePage() {
         </div>
 
         <div className="flex w-full max-w-2xl flex-col gap-5 sm:flex-row">
-          <ShineBorder borderRadius={16} borderWidth={1.5} duration={10} className="flex flex-1 flex-col gap-5 bg-white/80 p-8 shadow-sm backdrop-blur-sm">
+          <div className="flex flex-1 flex-col gap-5 rounded-2xl border border-black/10 bg-white/80 p-8 shadow-sm backdrop-blur-sm">
             <div className="flex flex-col gap-1 text-left">
               <p className="text-xs font-semibold uppercase tracking-widest text-amber-600">New here</p>
               <h2 className="text-xl font-bold text-gray-900">Apply to tutor</h2>
               <p className="mt-1 text-sm text-gray-500">Submit your application with your CV — a moderator will review and approve it.</p>
             </div>
             <SignUpDialog />
-          </ShineBorder>
+          </div>
           <div className="flex items-center justify-center sm:flex-col">
             <div className="h-px w-full bg-gray-200 sm:h-full sm:w-px" />
             <span className="shrink-0 px-3 py-2 text-xs font-medium text-gray-400">or</span>
             <div className="h-px w-full bg-gray-200 sm:h-full sm:w-px" />
           </div>
-          <ShineBorder borderRadius={16} borderWidth={1.5} duration={10} className="flex flex-1 flex-col gap-5 bg-white/80 p-8 shadow-sm backdrop-blur-sm">
+          <div className="flex flex-1 flex-col gap-5 rounded-2xl border border-black/10 bg-white/80 p-8 shadow-sm backdrop-blur-sm">
             <div className="flex flex-col gap-1 text-left">
               <p className="text-xs font-semibold uppercase tracking-widest text-amber-600">Returning tutor</p>
               <h2 className="text-xl font-bold text-gray-900">Sign back in</h2>
               <p className="mt-1 text-sm text-gray-500">Pick up right where you left off.</p>
             </div>
             <SignInDialog />
-          </ShineBorder>
+          </div>
         </div>
       </div>
     </RhythmicRipplesBackground>
