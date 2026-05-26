@@ -1,6 +1,6 @@
-api:
-    background verfication process
-    Fix login with google and email verification
+
+    
+    Fix login with google and 
 
 
 
@@ -25,7 +25,8 @@ add acess to student dashboard without needing to create a session
 create an admin login credentials
 aesthetics
 gmeet integration
-
+email verification
 
 scrapped:
 blind accessability
+background verfication process
