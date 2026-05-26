@@ -17,6 +17,7 @@ import { Label } from "@/components/ui/label";
 import { useAuth } from "@/context/auth-context";
 import { validateEmail, verifyEmailDomain } from "@/lib/email-validation";
 import { generateOTP, storeOTP, verifyOTP, sendOTP } from "@/lib/otp";
+import { ShineBorder } from "@/components/ui/shine-border";
 
 function BrandMark() {
   return (
@@ -328,14 +329,14 @@ export default function FindAuthPage() {
 
         <div className="flex w-full max-w-2xl flex-col gap-5 sm:flex-row">
           {/* Sign up card */}
-          <div className="flex flex-1 flex-col gap-5 rounded-2xl border border-black/10 bg-white/80 p-8 shadow-sm backdrop-blur-sm">
+          <ShineBorder borderRadius={16} borderWidth={1.5} duration={10} className="flex flex-1 flex-col gap-5 bg-white/80 p-8 shadow-sm backdrop-blur-sm">
             <div className="flex flex-col gap-1 text-left">
               <p className="text-xs font-semibold uppercase tracking-widest text-amber-600">New student</p>
               <h2 className="text-xl font-bold text-gray-900">Create an account</h2>
               <p className="mt-1 text-sm text-gray-500">Get matched with a volunteer tutor for free.</p>
             </div>
             <SignUpDialog />
-          </div>
+          </ShineBorder>
 
           {/* Divider */}
           <div className="flex items-center justify-center sm:flex-col">
@@ -345,14 +346,14 @@ export default function FindAuthPage() {
           </div>
 
           {/* Sign in card */}
-          <div className="flex flex-1 flex-col gap-5 rounded-2xl border border-black/10 bg-white/80 p-8 shadow-sm backdrop-blur-sm">
+          <ShineBorder borderRadius={16} borderWidth={1.5} duration={10} className="flex flex-1 flex-col gap-5 bg-white/80 p-8 shadow-sm backdrop-blur-sm">
             <div className="flex flex-col gap-1 text-left">
               <p className="text-xs font-semibold uppercase tracking-widest text-amber-600">Returning student</p>
               <h2 className="text-xl font-bold text-gray-900">Sign back in</h2>
               <p className="mt-1 text-sm text-gray-500">Pick up right where you left off.</p>
             </div>
             <SignInDialog />
-          </div>
+          </ShineBorder>
         </div>
 
         <p className="mt-8 text-sm text-gray-400">
