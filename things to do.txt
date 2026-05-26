@@ -1,8 +1,31 @@
-Fix login with google and email verification
+api:
+    background verfication process
+    Fix login with google and email verification
+
+
+
+
+
+
+
+
+
+
+
+
+done:
 add requests page on to tutor dashboard
 ensure requests sent are shown to tutors
 add functionality to accept or reject requests
 add option to finalise a session after it has been accepted
-blind accessability
+same account being both student and tutor
+manual searching for tutors
+add number of hours tutored to tutor profile
+add acess to student dashboard without needing to create a session
+create an admin login credentials
 aesthetics
-remove dummy data
+gmeet integration
+
+
+scrapped:
+blind accessability
