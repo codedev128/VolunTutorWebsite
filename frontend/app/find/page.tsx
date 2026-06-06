@@ -10,7 +10,7 @@ import { FloatingPathsBg } from "@/components/ui/floating-paths";
 
 /* ── Constants ───────────────────────────────────────── */
 const SUBJECTS = [
-  "Maths", "Physics", "Biology", "English", "History",
+  "Maths", "Physics", "Chemistry", "Biology", "English", "History",
   "Economics", "Business", "Accounts", "Social", "Politics",
   "Geography", "Computer Science", "IT", "Arts", "Psychology",
 ];

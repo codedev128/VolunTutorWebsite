@@ -9,6 +9,23 @@ export interface DbUser {
   password: string;
   role: "tutor" | "student";
   is_banned: boolean;
+  phone_number?: string;
+}
+
+export async function getUserById(id: string): Promise<DbUser | null> {
+  const { data, error } = await supabase
+    .from("users")
+    .select("*")
+    .eq("id", id)
+    .maybeSingle();
+  if (error) throw error;
+  return data ?? null;
+}
+
+// Generic updater used by the profile-completion gate to fill missing fields.
+export async function updateUserFields(userId: string, fields: Record<string, unknown>): Promise<void> {
+  const { error } = await supabase.from("users").update(fields).eq("id", userId);
+  if (error) throw error;
 }
 
 export async function getUsers(): Promise<DbUser[]> {
@@ -35,6 +52,14 @@ export async function createUser(user: Omit<DbUser, "is_banned">): Promise<DbUse
     .single();
   if (error) throw error;
   return data;
+}
+
+export async function setUserPassword(userId: string, password: string): Promise<void> {
+  const { error } = await supabase
+    .from("users")
+    .update({ password })
+    .eq("id", userId);
+  if (error) throw error;
 }
 
 export async function setBanned(userId: string, banned: boolean): Promise<void> {
@@ -67,6 +92,7 @@ export interface DbApplication {
   name: string;
   email: string;
   password: string;
+  phone_number?: string;
   cv_file_name?: string;
   cv_data_url?: string;
   status: "pending" | "approved" | "denied";
@@ -96,13 +122,24 @@ export async function getApplicationByEmail(email: string): Promise<DbApplicatio
 }
 
 export async function createApplication(app: Omit<DbApplication, "submitted_at" | "status">): Promise<void> {
-  const { error } = await supabase.from("tutor_applications").insert({
+  const payload = {
     ...app,
     email: app.email.toLowerCase(),
-    status: "pending",
+    status: "pending" as const,
     submitted_at: new Date().toISOString(),
-  });
-  if (error) throw error;
+  };
+  const { error } = await supabase.from("tutor_applications").insert(payload);
+  if (error) {
+    // Gracefully degrade if the phone_number column hasn't been added yet
+    if (/phone_number/i.test(error.message)) {
+      const { phone_number: _omit, ...withoutPhone } = payload;
+      void _omit;
+      const { error: retryErr } = await supabase.from("tutor_applications").insert(withoutPhone);
+      if (retryErr) throw retryErr;
+      return;
+    }
+    throw error;
+  }
 }
 
 export async function deleteApplication(id: string): Promise<void> {
@@ -198,7 +235,9 @@ export async function getAllMatches(): Promise<DbTutorMatch[]> {
 }
 
 export async function createMatch(match: DbTutorMatch): Promise<void> {
-  const { error } = await supabase.from("tutor_matches").insert({
+  // Store everything useful; auto-drop any column the table doesn't have yet so
+  // a schema gap on an optional field never blocks the core booking from saving.
+  const payload: Record<string, unknown> = {
     id: match.id,
     tutor_id: match.tutor_id,
     student_id: match.student_id,
@@ -207,8 +246,32 @@ export async function createMatch(match: DbTutorMatch): Promise<void> {
     booked_slots: match.booked_slots ?? [],
     matched_at: match.matched_at ?? new Date().toISOString(),
     status: match.status ?? "ACTIVE",
-  });
-  if (error) throw error;
+    student_name: match.student_name,
+    avatar: match.avatar,
+    help_message: match.help_message,
+    session_count: match.session_count,
+    next_session: match.next_session,
+    proficiency: match.proficiency,
+    unread_messages: match.unread_messages,
+  };
+  // Try the full insert; if Postgres reports a missing column, drop it and retry.
+  for (let attempt = 0; attempt < 12; attempt++) {
+    const { error } = await supabase.from("tutor_matches").insert(payload);
+    if (!error) return;
+    // Row already exists (duplicate primary key) → update it instead.
+    if (error.code === "23505") {
+      await supabase.from("tutor_matches").update(payload).eq("id", match.id);
+      return;
+    }
+    const m = /column "?([a-z_]+)"? .* does not exist/i.exec(error.message)
+      ?? /Could not find the '([a-z_]+)' column/i.exec(error.message);
+    const col = m?.[1];
+    if (col && col in payload && !["id", "tutor_id", "booked_slots"].includes(col)) {
+      delete payload[col];
+      continue; // retry without the missing optional column
+    }
+    throw error; // genuine error (or a core column is missing)
+  }
 }
 
 export async function updateMatch(
@@ -512,6 +575,148 @@ export async function deleteReport(id: string): Promise<void> {
   if (error) throw error;
 }
 
+/* ── Mod classrooms ──────────────────────────────────── */
+
+export interface DbClassroomMember {
+  id: string;
+  mod_id: string;
+  student_id: string;
+  joined_at: string;
+}
+
+export async function getModClassroom(modId: string): Promise<DbClassroomMember[]> {
+  const { data, error } = await supabase
+    .from("mod_classrooms")
+    .select("*")
+    .eq("mod_id", modId);
+  if (error) throw error;
+  return (data ?? []) as DbClassroomMember[];
+}
+
+export async function addModClassroomStudent(modId: string, studentId: string): Promise<void> {
+  const { error } = await supabase.from("mod_classrooms").insert({
+    id: `${modId}-${studentId}-${Date.now()}`,
+    mod_id: modId,
+    student_id: studentId,
+    joined_at: new Date().toISOString(),
+  });
+  if (error) throw error;
+}
+
+export async function removeModClassroomStudent(modId: string, studentId: string): Promise<void> {
+  const { error } = await supabase
+    .from("mod_classrooms")
+    .delete()
+    .eq("mod_id", modId)
+    .eq("student_id", studentId);
+  if (error) throw error;
+}
+
+export async function getAllClassroomMembers(): Promise<DbClassroomMember[]> {
+  const { data, error } = await supabase.from("mod_classrooms").select("*");
+  if (error) throw error;
+  return (data ?? []) as DbClassroomMember[];
+}
+
+export async function getStudentClassroom(studentId: string): Promise<{ mod_id: string } | null> {
+  const { data, error } = await supabase
+    .from("mod_classrooms")
+    .select("mod_id")
+    .eq("student_id", studentId)
+    .maybeSingle();
+  if (error) throw error;
+  return data ?? null;
+}
+
+export async function getTutorMatchesByStudentIds(studentIds: string[]): Promise<DbTutorMatch[]> {
+  if (studentIds.length === 0) return [];
+  const { data, error } = await supabase
+    .from("tutor_matches")
+    .select("*")
+    .in("student_id", studentIds);
+  if (error) throw error;
+  return (data ?? []) as DbTutorMatch[];
+}
+
+/* ── Classroom hours (mod-specific per tutor) ────────── */
+
+export interface DbClassroomHours {
+  id: string;
+  mod_id: string;
+  tutor_id: string;
+  hours: number;
+}
+
+export async function getClassroomHours(modId: string): Promise<DbClassroomHours[]> {
+  const { data, error } = await supabase
+    .from("classroom_hours")
+    .select("*")
+    .eq("mod_id", modId);
+  if (error) throw error;
+  return (data ?? []) as DbClassroomHours[];
+}
+
+export async function setClassroomHours(modId: string, tutorId: string, hours: number): Promise<void> {
+  const existing = await supabase
+    .from("classroom_hours")
+    .select("id")
+    .eq("mod_id", modId)
+    .eq("tutor_id", tutorId)
+    .maybeSingle();
+  if (existing.data) {
+    const { error } = await supabase
+      .from("classroom_hours")
+      .update({ hours })
+      .eq("mod_id", modId)
+      .eq("tutor_id", tutorId);
+    if (error) throw error;
+  } else {
+    const { error } = await supabase
+      .from("classroom_hours")
+      .insert({ id: `${modId}-${tutorId}`, mod_id: modId, tutor_id: tutorId, hours });
+    if (error) throw error;
+  }
+}
+
+/* ── Mod ↔ Tutor messages ────────────────────────────── */
+
+export interface DbModTutorMessage {
+  id: string;
+  mod_id: string;
+  tutor_id: string;
+  from_role: "mod" | "tutor";
+  body: string;
+  sent_at: string;
+}
+
+export async function getModTutorMessages(modId: string, tutorId: string): Promise<DbModTutorMessage[]> {
+  const { data, error } = await supabase
+    .from("mod_tutor_messages")
+    .select("*")
+    .eq("mod_id", modId)
+    .eq("tutor_id", tutorId)
+    .order("sent_at", { ascending: true });
+  if (error) throw error;
+  return (data ?? []) as DbModTutorMessage[];
+}
+
+export async function sendModTutorMessage(
+  modId: string,
+  tutorId: string,
+  fromRole: "mod" | "tutor",
+  body: string
+): Promise<void> {
+  const { error } = await supabase.from("mod_tutor_messages").insert({
+    id: `mtm-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+    mod_id: modId,
+    tutor_id: tutorId,
+    from_role: fromRole,
+    body,
+    sent_at: new Date().toISOString(),
+  });
+  if (error) throw error;
+}
+
 /* ── Reset (admin) ───────────────────────────────────── */
 
 export async function resetAllData(): Promise<void> {
@@ -522,6 +727,8 @@ export async function resetAllData(): Promise<void> {
     "tutor_data",
     "reviews",
     "tutor_reports",
+    "mod_classrooms",
+    "classroom_hours",
     "tutor_applications",
     "users",
   ];

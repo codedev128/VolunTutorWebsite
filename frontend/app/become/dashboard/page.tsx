@@ -6,6 +6,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { useAuth } from "@/context/auth-context";
 import * as db from "@/lib/db";
+import { ProfileCompletionGate } from "@/components/profile-completion-gate";
 
 /* ── Types ───────────────────────────────────────────── */
 type MatchStatus = "ACTIVE" | "AWAITING_FIRST_SESSION" | "PAUSED";
@@ -40,6 +41,7 @@ const EDU_RANK: Record<string, number> = {
 
 interface ActiveMatch {
   id: string;
+  studentId?: string;
   studentName: string;
   avatar: string;
   subject: string;
@@ -56,7 +58,7 @@ interface ActiveMatch {
 
 interface Subject {
   name: string;
-  level: "Expert" | "Proficient" | "Familiar";
+  level: "Foundation" | "Proficient" | "Expert" | "Specialist";
   education: string;
 }
 
@@ -317,10 +319,17 @@ const EDUCATION_LABELS: Record<string, string> = {
 };
 
 function mapProficiencyLevel(p: string): Subject["level"] {
-  if (p === "expert")   return "Expert";
-  if (p === "advanced") return "Proficient";
-  if (p === "intermediate") return "Proficient";
-  return "Familiar";
+  switch (p) {
+    case "foundation": return "Foundation";
+    case "proficient": return "Proficient";
+    case "expert":     return "Expert";
+    case "specialist": return "Specialist";
+    // legacy values stored before the 4-category system
+    case "advanced":     return "Expert";
+    case "intermediate": return "Proficient";
+    case "beginner":     return "Foundation";
+    default:             return "Proficient";
+  }
 }
 
 
@@ -526,9 +535,10 @@ function ProfilePanel({
 
 function LevelBadge({ level }: { level: Subject["level"] }) {
   const cls = {
-    Expert:     "bg-amber-100 text-amber-700 border-amber-200",
+    Foundation: "bg-blue-50 text-blue-700 border-blue-200",
     Proficient: "bg-emerald-50 text-emerald-700 border-emerald-200",
-    Familiar:   "bg-gray-100 text-gray-600 border-gray-200",
+    Expert:     "bg-amber-100 text-amber-700 border-amber-200",
+    Specialist: "bg-violet-50 text-violet-700 border-violet-200",
   }[level];
   return <span className={`rounded-full border px-2 py-0.5 text-xs font-semibold ${cls}`}>{level}</span>;
 }
@@ -578,7 +588,7 @@ export default function TutorDashboard() {
   const [profileSubjects, setProfileSubjects] = useState<Subject[]>([]);
   const [selectedSlots, setSelectedSlots] = useState<Set<string>>(new Set());
   const [pendingRequests, setPendingRequests] = useState<StudentRequest[]>([]);
-  const [activeTab, setActiveTab] = useState<"matches" | "requests" | "messages">("matches");
+  const [activeTab, setActiveTab] = useState<"matches" | "requests" | "messages" | "mod-messages">("matches");
   const [activeMatchId, setActiveMatchId] = useState<string | null>(null);
   const [messageInput, setMessageInput] = useState("");
   const [profileOpen, setProfileOpen] = useState(false);
@@ -586,6 +596,7 @@ export default function TutorDashboard() {
   const [bio, setBio] = useState("");
   const [bioEditing, setBioEditing] = useState(false);
   const [bioInput, setBioInput] = useState("");
+  const [acceptError, setAcceptError] = useState("");
   const [gmeetUrl, setGmeetUrl] = useState("");
   const [gmeetInput, setGmeetInput] = useState("");
   const [gmeetEditing, setGmeetEditing] = useState(false);
@@ -594,6 +605,10 @@ export default function TutorDashboard() {
   const avatarInputRef = useRef<HTMLInputElement>(null);
   const [dismissedSlots, setDismissedSlots] = useState<Set<string>>(new Set());
   const [messages, setMessages] = useState<Record<string, { from: "tutor" | "student"; body: string; sentAt?: string }[]>>({});
+  const [contactableMods, setContactableMods] = useState<Array<{ modId: string; modName: string }>>([]);
+  const [activeModId, setActiveModId] = useState<string | null>(null);
+  const [modMessages, setModMessages] = useState<Record<string, db.DbModTutorMessage[]>>({});
+  const [modMessageInput, setModMessageInput] = useState("");
 
   useEffect(() => {
     if (!isLoading && !user) router.replace("/become");
@@ -626,7 +641,11 @@ export default function TutorDashboard() {
         const allRequests = await db.getRequests();
 
         const matching = allRequests.filter((req) => {
-          if (req.status !== "pending") return false;
+          // Each requested slot is handled independently. A request stays
+          // actionable for this tutor while it's unclaimed (pending) OR already
+          // claimed by THIS tutor (so remaining slots can still be accepted/rejected).
+          if (req.status === "cancelled") return false;
+          if (req.status === "accepted" && req.accepted_by_tutor_id !== user!.id) return false;
           if (rejected.includes(req.id)) return false;
           if (req.target_tutor_id && req.target_tutor_id !== user!.id) return false;
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -655,6 +674,7 @@ export default function TutorDashboard() {
         if (savedMatches.length > 0) {
           const mappedMatches: ActiveMatch[] = savedMatches.map((m) => ({
             id: m.id,
+            studentId: m.student_id,
             studentName: m.student_name ?? "Student",
             avatar: m.avatar ?? "??",
             subject: m.subject ?? "",
@@ -662,7 +682,8 @@ export default function TutorDashboard() {
             proficiency: ((m.proficiency ?? "BEGINNER") as ActiveMatch["proficiency"]),
             helpMessage: m.help_message ?? "",
             matchedAt: m.matched_at ?? "recently",
-            sessionCount: m.session_count ?? 0,
+            // Each booked slot is one scheduled session.
+            sessionCount: (m.booked_slots ?? []).length,
             nextSession: m.next_session ?? null,
             bookedSlots: m.booked_slots ?? [],
             status: (m.status ?? "ACTIVE") as MatchStatus,
@@ -732,6 +753,75 @@ export default function TutorDashboard() {
     return () => clearInterval(interval);
   }, [user, activeMatchId]);
 
+  // Compute which organisations (schools) the tutor can message:
+  // any school that has at least one student currently matched with this tutor.
+  useEffect(() => {
+    if (!user || matches.length === 0) { setContactableMods([]); return; }
+    let cancelled = false;
+    async function computeContactableMods() {
+      try {
+        const allMembers = await db.getAllClassroomMembers().catch(() => [] as db.DbClassroomMember[]);
+        if (allMembers.length === 0) { if (!cancelled) setContactableMods([]); return; }
+
+        // Build lookup of classroom members by student id AND by lowercased name
+        // (name fallback covers matches whose student_id wasn't recorded).
+        const allUsers = await db.getUsers().catch(() => [] as db.DbUser[]);
+        const memberByStudentId = new Map(allMembers.map((m) => [m.student_id, m.mod_id]));
+        const memberByName = new Map<string, string>();
+        for (const mem of allMembers) {
+          const u = allUsers.find((x) => x.id === mem.student_id);
+          if (u) memberByName.set(u.name.trim().toLowerCase(), mem.mod_id);
+        }
+
+        const relevantModIds = new Set<string>();
+        for (const match of matches) {
+          if (match.studentId && memberByStudentId.has(match.studentId)) {
+            relevantModIds.add(memberByStudentId.get(match.studentId)!);
+          } else {
+            const byName = memberByName.get((match.studentName ?? "").trim().toLowerCase());
+            if (byName) relevantModIds.add(byName);
+          }
+        }
+        if (relevantModIds.size === 0) { if (!cancelled) setContactableMods([]); return; }
+
+        const allMods = await db.getModerators().catch(() => []);
+        const mods = [...relevantModIds]
+          .map((mid) => allMods.find((m) => m.id === mid))
+          .filter(Boolean)
+          .map((m) => ({ modId: m!.id, modName: m!.name }));
+        if (!cancelled) setContactableMods(mods);
+      } catch { /* ignore */ }
+    }
+    computeContactableMods();
+    return () => { cancelled = true; };
+  }, [user, matches]);
+
+  // Poll for new mod messages
+  useEffect(() => {
+    if (!user || !activeModId) return;
+    const load = async () => {
+      const msgs = await db.getModTutorMessages(activeModId, user.id).catch(() => [] as db.DbModTutorMessage[]);
+      setModMessages((prev) => ({ ...prev, [activeModId]: msgs }));
+    };
+    load();
+    const interval = setInterval(load, 3000);
+    return () => clearInterval(interval);
+  }, [user, activeModId]);
+
+  async function sendModMessage() {
+    if (!modMessageInput.trim() || !activeModId || !user) return;
+    const body = modMessageInput.trim();
+    setModMessageInput("");
+    setModMessages((prev) => ({
+      ...prev,
+      [activeModId]: [...(prev[activeModId] ?? []), {
+        id: `tmp-${Date.now()}`, mod_id: activeModId, tutor_id: user.id,
+        from_role: "tutor", body, sent_at: new Date().toISOString(),
+      }],
+    }));
+    await db.sendModTutorMessage(activeModId, user.id, "tutor", body).catch(console.error);
+  }
+
   function dismissSlot(reqId: string, slot: string) {
     const key = `${reqId}|${slot}`;
     setDismissedSlots((prev) => {
@@ -742,70 +832,84 @@ export default function TutorDashboard() {
     });
   }
 
-  function handleAcceptSlot(req: StudentRequest, slot: string) {
+  async function handleAcceptSlot(req: StudentRequest, slot: string) {
+    setAcceptError("");
     const session = slotKeyToSession(slot);
     const weeks = req.recurrenceWeeks ?? 1;
     const newSlots = expandSlot(slot, weeks);
     const existingMatch = matches.find((m) => m.id === req.id);
-    if (existingMatch) {
-      const updated: ActiveMatch = {
-        ...existingMatch,
-        bookedSlots: [...(existingMatch.bookedSlots ?? []), ...newSlots],
-        nextSession: existingMatch.nextSession ?? session,
-        status: "ACTIVE",
-      };
-      setMatches((prev) => prev.map((m) => m.id === req.id ? updated : m));
-      db.updateMatch(user!.id, req.id, {
-        booked_slots: updated.bookedSlots,
-        next_session: updated.nextSession,
-        status: "ACTIVE",
-      }).catch(() => { /* ignore */ });
-    } else {
-      const newMatch: ActiveMatch = {
-        id: req.id,
-        studentName: req.studentName,
-        avatar: req.avatar,
-        subject: req.subject,
-        gradeLevel: GRADE_LABELS[req.gradeLevel] ?? req.gradeLevel,
-        proficiency: "BEGINNER",
-        helpMessage: req.helpMessage,
-        matchedAt: "just now",
-        sessionCount: 0,
-        nextSession: session,
-        bookedSlots: newSlots,
-        status: "ACTIVE",
-        unreadMessages: 0,
-      };
-      setMatches((prev) => [...prev, newMatch]);
-      setMessages((prev) => ({ ...prev, [req.id]: [] }));
-      db.createMatch({
-        id: newMatch.id,
-        tutor_id: user!.id,
-        student_id: req.studentId,
-        subject: newMatch.subject,
-        grade_level: newMatch.gradeLevel,
-        booked_slots: newMatch.bookedSlots ?? [],
-        matched_at: new Date().toISOString(),
-        status: newMatch.status,
-        student_name: newMatch.studentName,
-        avatar: newMatch.avatar,
-        help_message: newMatch.helpMessage,
-        session_count: 0,
-        next_session: newMatch.nextSession,
-        proficiency: newMatch.proficiency,
-        unread_messages: 0,
-      }).catch(() => { /* ignore */ });
+    try {
+      if (existingMatch) {
+        const mergedSlots = [...(existingMatch.bookedSlots ?? []), ...newSlots];
+        const updated: ActiveMatch = {
+          ...existingMatch,
+          bookedSlots: mergedSlots,
+          sessionCount: mergedSlots.length,
+          nextSession: existingMatch.nextSession ?? session,
+          status: "ACTIVE",
+        };
+        setMatches((prev) => prev.map((m) => m.id === req.id ? updated : m));
+        await db.updateMatch(user!.id, req.id, {
+          booked_slots: updated.bookedSlots,
+          next_session: updated.nextSession,
+          status: "ACTIVE",
+        });
+      } else {
+        const newMatch: ActiveMatch = {
+          id: req.id,
+          studentName: req.studentName,
+          avatar: req.avatar,
+          subject: req.subject,
+          gradeLevel: GRADE_LABELS[req.gradeLevel] ?? req.gradeLevel,
+          proficiency: "BEGINNER",
+          helpMessage: req.helpMessage,
+          matchedAt: "just now",
+          sessionCount: newSlots.length,
+          nextSession: session,
+          bookedSlots: newSlots,
+          status: "ACTIVE",
+          unreadMessages: 0,
+        };
+        setMatches((prev) => [...prev, newMatch]);
+        setMessages((prev) => ({ ...prev, [req.id]: [] }));
+        await db.createMatch({
+          id: newMatch.id,
+          tutor_id: user!.id,
+          student_id: req.studentId,
+          subject: newMatch.subject,
+          grade_level: newMatch.gradeLevel,
+          booked_slots: newMatch.bookedSlots ?? [],
+          matched_at: new Date().toISOString(),
+          status: newMatch.status,
+          student_name: newMatch.studentName,
+          avatar: newMatch.avatar,
+          help_message: newMatch.helpMessage,
+          session_count: newMatch.sessionCount,
+          next_session: newMatch.nextSession,
+          proficiency: newMatch.proficiency,
+          unread_messages: 0,
+        });
+      }
+    } catch (e) {
+      const err = e as { message?: string; details?: string; hint?: string; code?: string };
+      const msg = err?.message || err?.details || err?.hint || err?.code || JSON.stringify(e);
+      console.error("Booking failed:", e);
+      setAcceptError(`Couldn't save the booking: ${msg}`);
     }
 
-    // Mark request as accepted in Supabase
+    // Claim the request for this tutor so the student sees the match. Other
+    // slots stay actionable — we do NOT remove the whole request here.
     db.updateRequestStatus(req.id, "accepted", user!.id).catch(() => { /* ignore */ });
+    setPendingRequests((prev) =>
+      prev.map((r) => (r.id === req.id ? { ...r, status: "accepted", acceptedByTutorId: user!.id } : r))
+    );
 
-    // Remove the request from this tutor's pending list immediately
-    setPendingRequests((prev) => prev.filter((r) => r.id !== req.id));
+    // Hide only the accepted slot — remaining slots of this request stay visible.
     dismissSlot(req.id, slot);
   }
 
   function handleRejectSlot(req: StudentRequest, slot: string) {
+    // Decline only this slot — other slots of the request stay actionable.
     dismissSlot(req.id, slot);
   }
 
@@ -922,6 +1026,8 @@ export default function TutorDashboard() {
         className="hidden"
         onChange={handleAvatarFileChange}
       />
+      {/* Prompt existing accounts to fill any newly-added required fields */}
+      <ProfileCompletionGate userId={user.id} role="tutor" />
       {/* Profile panel */}
       <ProfilePanel
         isOpen={profileOpen}
@@ -1023,10 +1129,10 @@ export default function TutorDashboard() {
 
             {/* Tabs */}
             <div className="flex items-center gap-1 rounded-xl border border-black/10 bg-white p-1.5 shadow-sm w-fit">
-              {(["matches", "requests", "messages"] as const).map((tab) => {
+              {(["matches", "requests", "messages", "mod-messages"] as const).map((tab) => {
                 const unread = matches.reduce((a, m) => a + m.unreadMessages, 0);
                 const badge = tab === "messages" ? unread : tab === "requests" ? visibleRequestCount : 0;
-                const label = tab === "matches" ? "Current Students" : tab === "requests" ? "Requests" : "Messages";
+                const label = tab === "matches" ? "Current Students" : tab === "requests" ? "Requests" : tab === "messages" ? "Messages" : "Organisation Msg";
                 return (
                   <button key={tab} onClick={() => setActiveTab(tab)}
                     className={`relative rounded-lg px-5 py-2 text-sm font-semibold transition ${activeTab === tab ? "bg-amber-500 text-white shadow-sm" : "text-gray-500 hover:text-gray-800"}`}>
@@ -1147,6 +1253,9 @@ export default function TutorDashboard() {
             {/* ── Requests tab ── */}
             {activeTab === "requests" && (
               <div className="space-y-4">
+                {acceptError && (
+                  <p className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600">{acceptError}</p>
+                )}
                 {(() => {
                   const visibleRequests = pendingRequests.filter((req) =>
                     (req.availabilitySlots ?? []).some(
@@ -1322,6 +1431,92 @@ export default function TutorDashboard() {
                   )}
                 </div>
               </div>
+            )}
+
+            {/* ── Organisation Messages tab ── */}
+            {activeTab === "mod-messages" && (
+              contactableMods.length === 0 ? (
+                <div className="flex flex-col items-center gap-3 rounded-2xl border border-dashed border-gray-200 bg-white py-16 text-center">
+                  <div className="flex size-14 items-center justify-center rounded-full bg-amber-50 border border-amber-100">
+                    <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+                    </svg>
+                  </div>
+                  <p className="font-semibold text-gray-500">No organisations to message yet</p>
+                  <p className="text-sm text-gray-400">You&apos;ll be able to message an organisation once you&apos;re tutoring one of their students.</p>
+                </div>
+              ) : (
+                <div className="flex h-[600px] overflow-hidden rounded-2xl border border-black/10 bg-white shadow-sm">
+                  {/* Organisation list */}
+                  <div className="w-56 shrink-0 border-r border-gray-100 flex flex-col">
+                    <div className="border-b border-gray-100 px-4 py-3">
+                      <p className="text-xs font-bold uppercase tracking-widest text-amber-600">Organisations</p>
+                    </div>
+                    <div className="flex-1 overflow-y-auto">
+                      {contactableMods.map((m) => (
+                        <button key={m.modId} onClick={() => setActiveModId(m.modId)}
+                          className={`flex w-full items-center gap-3 px-4 py-3 text-left transition ${activeModId === m.modId ? "bg-amber-50 border-r-2 border-amber-400" : "hover:bg-gray-50"}`}>
+                          <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-violet-100 text-xs font-bold text-violet-700">
+                            {m.modName.split(" ").map((w) => w[0]).join("").slice(0, 2).toUpperCase()}
+                          </div>
+                          <p className="truncate text-sm font-semibold text-gray-800">{m.modName}</p>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  {/* Thread */}
+                  <div className="flex flex-1 flex-col min-w-0">
+                    {activeModId ? (
+                      <>
+                        <div className="flex items-center gap-3 border-b border-gray-100 px-5 py-3">
+                          <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-violet-100 text-xs font-bold text-violet-700">
+                            {(contactableMods.find((m) => m.modId === activeModId)?.modName ?? "M").split(" ").map((w) => w[0]).join("").slice(0, 2).toUpperCase()}
+                          </div>
+                          <div>
+                            <p className="text-sm font-bold text-gray-900">{contactableMods.find((m) => m.modId === activeModId)?.modName}</p>
+                            <p className="text-xs text-gray-400">Organisation</p>
+                          </div>
+                        </div>
+                        <div className="flex-1 overflow-y-auto space-y-3 px-5 py-4">
+                          {(modMessages[activeModId] ?? []).length === 0 && (
+                            <p className="text-center text-sm text-gray-400 mt-8">No messages yet. Say hello!</p>
+                          )}
+                          {(modMessages[activeModId] ?? []).map((msg, i) => (
+                            <div key={i} className={`flex ${msg.from_role === "tutor" ? "justify-end" : "justify-start"}`}>
+                              <div className={`max-w-xs rounded-2xl px-4 py-2.5 text-sm ${msg.from_role === "tutor" ? "bg-amber-500 text-white rounded-br-sm" : "bg-gray-100 text-gray-800 rounded-bl-sm"}`}>
+                                {msg.body}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                        <div className="flex items-center gap-2 border-t border-gray-100 px-4 py-3">
+                          <input type="text" placeholder="Message organisation…"
+                            value={modMessageInput}
+                            onChange={(e) => setModMessageInput(e.target.value)}
+                            onKeyDown={(e) => e.key === "Enter" && sendModMessage()}
+                            className="flex-1 rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-100"
+                          />
+                          <button onClick={sendModMessage}
+                            className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-amber-500 text-white transition hover:bg-amber-400">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                              <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
+                            </svg>
+                          </button>
+                        </div>
+                      </>
+                    ) : (
+                      <div className="flex flex-1 flex-col items-center justify-center gap-3 text-center px-8">
+                        <div className="flex size-14 items-center justify-center rounded-full bg-amber-50 border border-amber-100">
+                          <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+                          </svg>
+                        </div>
+                        <p className="font-semibold text-gray-500">Select an organisation to view messages</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )
             )}
           </main>
         </div>

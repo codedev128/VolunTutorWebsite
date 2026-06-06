@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import * as db from "@/lib/db";
+import { PasswordInput } from "@/components/ui/password-input";
 
 /* ── Types ───────────────────────────────────────────── */
 interface StoredUser {
@@ -17,6 +18,7 @@ interface TutorApplication {
   name: string;
   email: string;
   password: string;
+  phoneNumber?: string;
   cvFileName: string;
   cvDataUrl: string;
   status: "pending" | "approved" | "denied";
@@ -168,6 +170,7 @@ export default function AdminDashboard() {
   const [sessions, setSessions] = useState<SessionRow[]>([]);
   const [reviews, setReviews] = useState<ReviewRecord[]>([]);
   const [reports, setReports] = useState<db.DbTutorReport[]>([]);
+  const [classroomMap, setClassroomMap] = useState<Record<string, string>>({}); // studentId → mod name
   const [enrichedTutors, setEnrichedTutors] = useState<EnrichedTutor[]>([]);
   const [applications, setApplications] = useState<TutorApplication[]>([]);
   const [moderators, setModerators] = useState<Moderator[]>([]);
@@ -286,6 +289,7 @@ export default function AdminDashboard() {
             name: a.name,
             email: a.email,
             password: a.password,
+            phoneNumber: a.phone_number,
             cvFileName: a.cv_file_name ?? "",
             cvDataUrl: a.cv_data_url ?? "",
             status: a.status,
@@ -300,6 +304,17 @@ export default function AdminDashboard() {
       // Moderators
       const mods = await db.getModerators();
       setModerators(mods.map((m) => ({ id: m.id, name: m.name, email: m.email, password: m.password, createdAt: m.created_at ?? "" })));
+
+      // Classroom membership map: studentId → mod name
+      try {
+        const classroomRows = await db.getAllClassroomMembers();
+        const map: Record<string, string> = {};
+        for (const row of classroomRows) {
+          const m = mods.find((x) => x.id === row.mod_id);
+          if (m) map[row.student_id] = m.name;
+        }
+        setClassroomMap(map);
+      } catch { /* ignore */ }
     } catch { /* ignore */ }
   }
 
@@ -810,6 +825,12 @@ export default function AdminDashboard() {
                           {isBanned && <Badge label="Banned" color="red" />}
                         </div>
                         <p className="text-xs text-slate-400 mt-0.5">{s.email}</p>
+                        {classroomMap[s.id] && (
+                          <div className="mt-1.5 flex items-center gap-1.5">
+                            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fbbf24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+                            <span className="text-xs font-semibold text-amber-400">{classroomMap[s.id]}&apos;s school</span>
+                          </div>
+                        )}
                         <div className="mt-2 flex flex-wrap gap-3 text-xs text-slate-400">
                           <span>{studentReqs.filter((r) => r.status === "pending").length} pending</span>
                           <span>·</span>
@@ -1024,6 +1045,7 @@ export default function AdminDashboard() {
                       />
                     </div>
                     <p className="text-sm text-slate-400">{app.email}</p>
+                    {app.phoneNumber && <p className="text-xs text-slate-500">{app.phoneNumber}</p>}
                     <div className="mt-2 flex flex-wrap gap-4 text-xs text-slate-500">
                       <span>Submitted {new Date(app.submittedAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}</span>
                       {app.reviewedBy && <span>Reviewed by <span className="text-slate-300">{app.reviewedBy}</span></span>}
@@ -1105,9 +1127,9 @@ export default function AdminDashboard() {
                 </div>
                 <div>
                   <label className="block text-xs text-slate-400 mb-1.5">Password</label>
-                  <input type="password" placeholder="At least 8 characters" value={newMod.password}
+                  <PasswordInput placeholder="At least 8 characters" value={newMod.password}
                     onChange={(e) => setNewMod((p) => ({ ...p, password: e.target.value }))}
-                    className="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-white placeholder:text-slate-500 focus:border-amber-400 focus:outline-none" />
+                    inputClassName="rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-white placeholder:text-slate-500 focus:border-amber-400 focus:outline-none" />
                 </div>
               </div>
               {newModError && <p className="mt-3 text-xs text-red-400">{newModError}</p>}

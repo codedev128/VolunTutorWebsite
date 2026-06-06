@@ -4,6 +4,7 @@ import { useState, useId, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FloatingPathsBg } from "@/components/ui/floating-paths";
+import { PasswordInput } from "@/components/ui/password-input";
 import {
   Dialog,
   DialogContent,
@@ -16,7 +17,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/context/auth-context";
 import { validateEmail, verifyEmailDomain } from "@/lib/email-validation";
-import { generateOTP, storeOTP, verifyOTP, sendOTP } from "@/lib/otp";
+import { generateOTP, storeOTP, verifyOTP, clearOTP, sendOTP } from "@/lib/otp";
+import { ForgotPasswordDialog } from "@/components/forgot-password-dialog";
 
 /* ── Sign Up Dialog ──────────────────────────────────── */
 function SignUpDialog() {
@@ -79,6 +81,7 @@ function SignUpDialog() {
     setLoading(true);
     const r = await signUp(name.trim(), email.trim(), password, "student");
     if (!r.ok) { setOtpError(r.error ?? "Something went wrong."); setLoading(false); return; }
+    clearOTP(email.trim().toLowerCase());
     router.push("/find/dashboard");
   }
 
@@ -118,11 +121,11 @@ function SignUpDialog() {
               </div>
               <div className="space-y-2">
                 <Label htmlFor={`${id}-password`}>Password</Label>
-                <Input id={`${id}-password`} placeholder="At least 8 characters" type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
+                <PasswordInput id={`${id}-password`} placeholder="At least 8 characters" value={password} onChange={(e) => setPassword(e.target.value)} inputClassName="flex h-9 rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring" />
               </div>
               <div className="space-y-2">
                 <Label htmlFor={`${id}-confirm`}>Confirm password</Label>
-                <Input id={`${id}-confirm`} placeholder="Repeat your password" type="password" value={confirm} onChange={(e) => setConfirm(e.target.value)} onKeyDown={(e) => e.key === "Enter" && handleSignUp()} />
+                <PasswordInput id={`${id}-confirm`} placeholder="Repeat your password" value={confirm} onChange={(e) => setConfirm(e.target.value)} onKeyDown={(e) => e.key === "Enter" && handleSignUp()} inputClassName="flex h-9 rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring" />
               </div>
             </div>
             {error && <p className="rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-sm text-red-600">{error}</p>}
@@ -246,7 +249,10 @@ function SignInDialog() {
               <Input id={`${id}-email`} placeholder="you@example.com" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
             </div>
             <div className="space-y-2">
-              <Label htmlFor={`${id}-password`}>Password</Label>
+              <div className="flex items-center justify-between">
+                <Label htmlFor={`${id}-password`}>Password</Label>
+                <ForgotPasswordDialog role="student" />
+              </div>
               <div className="relative">
                 <Input id={`${id}-password`} placeholder="Enter your password" type={showPw ? "text" : "password"} value={password} onChange={(e) => setPassword(e.target.value)} onKeyDown={(e) => e.key === "Enter" && handleSignIn()} className="pr-10" />
                 <button type="button" onClick={() => setShowPw((v) => !v)}

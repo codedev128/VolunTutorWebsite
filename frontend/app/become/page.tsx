@@ -16,9 +16,12 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useAuth } from "@/context/auth-context";
 import { validateEmail, verifyEmailDomain } from "@/lib/email-validation";
-import { generateOTP, storeOTP, verifyOTP, sendOTP } from "@/lib/otp";
+import { generateOTP, storeOTP, verifyOTP, clearOTP, sendOTP } from "@/lib/otp";
 import * as db from "@/lib/db";
 import { FloatingPathsBg } from "@/components/ui/floating-paths";
+import { PasswordInput } from "@/components/ui/password-input";
+import { ForgotPasswordDialog } from "@/components/forgot-password-dialog";
+import { COUNTRY_CODES, DEFAULT_COUNTRY_ISO } from "@/lib/country-codes";
 
 function GoogleIcon() {
   return (
@@ -47,6 +50,8 @@ function SignUpDialog() {
   const [step, setStep]             = useState<"form" | "otp">("form");
   const [name, setName]             = useState("");
   const [email, setEmail]           = useState("");
+  const [phone, setPhone]           = useState("");
+  const [countryIso, setCountryIso] = useState(DEFAULT_COUNTRY_ISO);
   const [password, setPassword]     = useState("");
   const [confirm, setConfirm]       = useState("");
   const [cvFile, setCvFile]         = useState<File | null>(null);
@@ -68,10 +73,16 @@ function SignUpDialog() {
 
   async function handleSignUp() {
     setError("");
-    if (!name.trim() || !email.trim() || !password.trim() || !confirm.trim()) {
+    if (!name.trim() || !email.trim() || !phone.trim() || !password.trim() || !confirm.trim()) {
       setError("Please fill in all fields."); return;
     }
+    if (!/^\d{6,15}$/.test(phone.trim())) {
+      setError("Please enter a valid phone number (digits only)."); return;
+    }
     if (!cvFile) { setError("Please attach your CV or resume."); return; }
+    if (cvFile.type !== "application/pdf" && !cvFile.name.toLowerCase().endsWith(".pdf")) {
+      setError("CV must be a PDF file."); return;
+    }
     const emailCheck = validateEmail(email);
     if (!emailCheck.ok) { setError(emailCheck.error!); return; }
     if (password.length < 8) { setError("Password must be at least 8 characters."); return; }
@@ -90,14 +101,14 @@ function SignUpDialog() {
         // Approved — only block if the user account still actually exists
         const user = await db.getUserByEmail(email.trim().toLowerCase());
         if (user) {
-          setError("An account with this email already exists. Please sign in."); return;
+          setError("Email is already in use."); return;
         }
         // Account was deleted by admin — remove the stale application and allow re-registration
         await db.deleteApplication(existing.id).catch(() => { /* ignore */ });
       } else {
         const user = await db.getUserByEmail(email.trim().toLowerCase());
         if (user) {
-          setError("An account with this email already exists. Please sign in."); return;
+          setError("Email is already in use."); return;
         }
       }
     } catch { /* ignore */ }
@@ -144,13 +155,16 @@ function SignUpDialog() {
         name: name.trim(),
         email: email.trim().toLowerCase(),
         password,
+        phone_number: `${COUNTRY_CODES.find((c) => c.iso === countryIso)?.code ?? "+91"} ${phone.trim()}`,
         cv_file_name: cvFile?.name ?? "cv",
         cv_data_url: pendingCvDataUrl,
       });
+      clearOTP(email.trim().toLowerCase());
       localStorage.setItem("vt_pending_email", email.trim().toLowerCase());
       router.push("/become/pending");
-    } catch {
-      setOtpError("Failed to submit application. Please try again.");
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      setOtpError(`Failed to submit application: ${msg}`);
       setLoading(false);
     }
   }
@@ -183,22 +197,50 @@ function SignUpDialog() {
             <div className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor={`${id}-name`}>Full name</Label>
-                <Input id={`${id}-name`} placeholder="Jane Smith" type="text" value={name} onChange={(e) => setName(e.target.value)} />
+                <Input id={`${id}-name`} placeholder="Jane Smith" type="text" value={name} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && handleSignUp()} />
               </div>
               <div className="space-y-2">
                 <Label htmlFor={`${id}-email`}>Email</Label>
-                <Input id={`${id}-email`} placeholder="jane@example.com" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+                <Input id={`${id}-email`} placeholder="jane@example.com" type="email" value={email} onChange={(e) => setEmail(e.target.value)} onKeyDown={(e) => e.key === "Enter" && handleSignUp()} />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor={`${id}-phone`}>Phone number <span className="text-red-500">*</span></Label>
+                <div className="flex">
+                  <select
+                    aria-label="Country code"
+                    value={countryIso}
+                    onChange={(e) => setCountryIso(e.target.value)}
+                    className="rounded-l-md border border-r-0 border-input bg-muted px-2 text-sm font-medium text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring max-w-[110px]"
+                  >
+                    {COUNTRY_CODES.map((c) => (
+                      <option key={c.iso} value={c.iso}>
+                        {c.flag} {c.code} {c.name}
+                      </option>
+                    ))}
+                  </select>
+                  <Input
+                    id={`${id}-phone`}
+                    placeholder="Phone number"
+                    type="tel"
+                    inputMode="numeric"
+                    maxLength={15}
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value.replace(/\D/g, "").slice(0, 15))}
+                    onKeyDown={(e) => e.key === "Enter" && handleSignUp()}
+                    className="rounded-l-none"
+                  />
+                </div>
               </div>
               <div className="space-y-2">
                 <Label htmlFor={`${id}-password`}>Password</Label>
-                <Input id={`${id}-password`} placeholder="At least 8 characters" type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
+                <PasswordInput id={`${id}-password`} placeholder="At least 8 characters" value={password} onChange={(e) => setPassword(e.target.value)} onKeyDown={(e) => e.key === "Enter" && handleSignUp()} inputClassName="flex h-9 rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring" />
               </div>
               <div className="space-y-2">
                 <Label htmlFor={`${id}-confirm`}>Confirm password</Label>
-                <Input id={`${id}-confirm`} placeholder="Repeat your password" type="password" value={confirm} onChange={(e) => setConfirm(e.target.value)} />
+                <PasswordInput id={`${id}-confirm`} placeholder="Repeat your password" value={confirm} onChange={(e) => setConfirm(e.target.value)} onKeyDown={(e) => e.key === "Enter" && handleSignUp()} inputClassName="flex h-9 rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring" />
               </div>
               <div className="space-y-2">
-                <Label>CV / Resume <span className="text-red-500 ml-0.5">*</span></Label>
+                <Label>CV / Resume (PDF only) <span className="text-red-500 ml-0.5">*</span></Label>
                 <label
                   htmlFor={`${id}-cv`}
                   className={`flex cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed py-5 px-3 text-center transition ${
@@ -221,12 +263,12 @@ function SignUpDialog() {
                       </svg>
                       <div>
                         <p className="text-sm font-medium text-gray-600">Click to upload your CV</p>
-                        <p className="text-xs text-gray-400 mt-0.5">PDF, DOC, DOCX, or image</p>
+                        <p className="text-xs text-gray-400 mt-0.5">PDF files only</p>
                       </div>
                     </>
                   )}
                   <input id={`${id}-cv`} type="file"
-                    accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,image/*,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                    accept=".pdf,application/pdf"
                     className="hidden" onChange={(e) => setCvFile(e.target.files?.[0] ?? null)} />
                 </label>
               </div>
@@ -364,7 +406,10 @@ function SignInDialog() {
               <Input id={`${id}-email`} placeholder="jane@example.com" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
             </div>
             <div className="space-y-2">
-              <Label htmlFor={`${id}-password`}>Password</Label>
+              <div className="flex items-center justify-between">
+                <Label htmlFor={`${id}-password`}>Password</Label>
+                <ForgotPasswordDialog role="tutor" />
+              </div>
               <div className="relative">
                 <Input id={`${id}-password`} placeholder="Enter your password" type={showPw ? "text" : "password"} value={password} onChange={(e) => setPassword(e.target.value)} onKeyDown={(e) => e.key === "Enter" && handleSignIn()} className="pr-10" />
                 <button type="button" onClick={() => setShowPw((v) => !v)}

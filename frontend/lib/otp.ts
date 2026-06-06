@@ -23,11 +23,17 @@ export function verifyOTP(email: string, entered: string): { ok: boolean; error?
       return { ok: false, error: "Code expired. Please request a new one." };
     }
     if (otp !== entered.trim()) return { ok: false, error: "Incorrect code. Please try again." };
-    localStorage.removeItem(`vt_otp_${email.toLowerCase()}`);
+    // NOTE: do NOT remove the OTP here — only clear it via clearOTP() once the
+    // follow-up action (create account / submit application / reset password)
+    // has actually succeeded, so a failed DB write doesn't strand the user.
     return { ok: true };
   } catch {
     return { ok: false, error: "Verification failed. Please try again." };
   }
+}
+
+export function clearOTP(email: string): void {
+  localStorage.removeItem(`vt_otp_${email.toLowerCase()}`);
 }
 
 export async function sendOTP(

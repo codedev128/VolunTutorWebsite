@@ -8,7 +8,7 @@ import { FloatingPathsBg } from "@/components/ui/floating-paths";
 
 /* ── Constants ───────────────────────────────────────── */
 const SUBJECTS = [
-  "Maths", "Physics", "Biology", "English", "History",
+  "Maths", "Physics", "Chemistry", "Biology", "English", "History",
   "Economics", "Business", "Accounts", "Social", "Politics",
   "Geography", "Computer Science", "IT", "Arts", "Psychology",
 ];
@@ -20,6 +20,24 @@ const EDUCATION_OPTIONS = [
   { value: "phd",          label: "PhD"                   },
   { value: "professional", label: "Industry Professional" },
 ];
+
+/*
+ * Four proficiency categories, grouped from the education options:
+ *   High School            → Foundation
+ *   Undergraduate / Postgraduate Degree → Proficient
+ *   PhD                    → Expert
+ *   Industry Professional  → Specialist
+ */
+export function educationToProficiency(education: string): string {
+  switch (education) {
+    case "high_school":  return "foundation";
+    case "ug":           return "proficient";
+    case "pg":           return "proficient";
+    case "phd":          return "expert";
+    case "professional": return "specialist";
+    default:             return "proficient";
+  }
+}
 
 const selectCls =
   "w-full rounded-lg border border-amber-200 bg-amber-100 px-3 py-2 text-sm font-medium text-gray-900 shadow-sm focus:border-amber-400 focus:outline-none focus:ring-2 focus:ring-amber-300/40";
@@ -235,11 +253,14 @@ export default function OnboardingPage() {
     setSaveError("");
     try {
       await db.setTutorProfile(user!.id, {
-        subjects: selectedSubjects.map((s) => ({
-          name: s,
-          proficiency: "intermediate",
-          educationLevel: education[s] ?? "ug",
-        })),
+        subjects: selectedSubjects.map((s) => {
+          const educationLevel = education[s] ?? "ug";
+          return {
+            name: s,
+            proficiency: educationToProficiency(educationLevel),
+            educationLevel,
+          };
+        }),
       });
       router.push("/become/dashboard");
     } catch (e) {

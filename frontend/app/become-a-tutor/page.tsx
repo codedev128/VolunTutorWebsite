@@ -16,6 +16,7 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useAuth } from "@/context/auth-context";
 import { FloatingPathsBg } from "@/components/ui/floating-paths";
+import { PasswordInput } from "@/components/ui/password-input";
 
 /* ── Google icon ─────────────────────────────────────── */
 function GoogleIcon() {
@@ -116,13 +117,13 @@ function SignUpDialog() {
             </div>
             <div className="space-y-2">
               <Label htmlFor={`${id}-password`}>Password</Label>
-              <Input
+              <PasswordInput
                 id={`${id}-password`}
                 placeholder="At least 6 characters"
-                type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && handleSignUp()}
+                inputClassName="flex h-9 rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
               />
             </div>
           </div>
@@ -218,13 +219,13 @@ function SignInDialog() {
             </div>
             <div className="space-y-2">
               <Label htmlFor={`${id}-password`}>Password</Label>
-              <Input
+              <PasswordInput
                 id={`${id}-password`}
                 placeholder="Enter your password"
-                type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && handleSignIn()}
+                inputClassName="flex h-9 rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
               />
             </div>
           </div>

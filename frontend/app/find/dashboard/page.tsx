@@ -6,6 +6,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { useAuth } from "@/context/auth-context";
 import * as db from "@/lib/db";
+import { ProfileCompletionGate } from "@/components/profile-completion-gate";
 
 /* ── Types ───────────────────────────────────────────── */
 type MatchStatus = "ACTIVE" | "AWAITING_FIRST_SESSION" | "PAUSED";
@@ -62,7 +63,7 @@ const GRADE_OPTIONS = [
 ];
 
 const SUBJECTS_LIST = [
-  "Maths", "Physics", "Biology", "English", "History",
+  "Maths", "Physics", "Chemistry", "Biology", "English", "History",
   "Economics", "Business", "Accounts", "Social", "Politics",
   "Geography", "Computer Science", "IT", "Arts", "Psychology",
 ];
@@ -76,7 +77,10 @@ const GRADE_RANK: Record<string, number> = {
 };
 
 const PROFICIENCY_LABEL: Record<string, string> = {
-  expert: "Expert", intermediate: "Proficient", beginner: "Familiar",
+  // 4-category system derived from the tutor's education level
+  foundation: "Foundation", proficient: "Proficient", expert: "Expert", specialist: "Specialist",
+  // legacy values stored before the 4-category system
+  intermediate: "Proficient", beginner: "Foundation", advanced: "Expert",
 };
 
 const RECURRENCE_LABELS: Record<number, string> = {
@@ -913,11 +917,11 @@ function ReviewModal({
 /* ── Profile Panel ───────────────────────────────────── */
 function ProfilePanel({
   isOpen, onClose, initials, profilePic, bio, bioEditing, bioInput,
-  matches, onAvatarClick, setBioInput, setBioEditing, saveBio, onSignOut,
+  matches, classroomModName, onAvatarClick, setBioInput, setBioEditing, saveBio, onSignOut,
 }: {
   isOpen: boolean; onClose: () => void; initials: string; profilePic: string | null;
   bio: string; bioEditing: boolean; bioInput: string;
-  matches: TutorMatch[];
+  matches: TutorMatch[]; classroomModName: string | null;
   onAvatarClick: () => void; setBioInput: (v: string) => void;
   setBioEditing: (v: boolean) => void; saveBio: () => void; onSignOut: () => void;
 }) {
@@ -964,6 +968,20 @@ function ProfilePanel({
               Change photo
             </button>
           </div>
+          {classroomModName && (
+            <div className="px-5 py-3.5 border-b border-gray-100">
+              <div className="flex items-center gap-2.5 rounded-xl border border-amber-200 bg-amber-50 px-3.5 py-2.5">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#d97706" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+                  <polyline points="9 22 9 12 15 12 15 22"/>
+                </svg>
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-amber-600">School</p>
+                  <p className="text-sm font-semibold text-amber-800">{classroomModName}&apos;s school</p>
+                </div>
+              </div>
+            </div>
+          )}
           <div className="px-5 py-5 border-b border-gray-100">
             <div className="mb-2 flex items-center justify-between">
               <span className="text-xs font-bold uppercase tracking-widest text-amber-600">Bio</span>
@@ -1019,6 +1037,44 @@ function ProfilePanel({
   );
 }
 
+/* ── Build the My Tutors list from accepted requests ──── */
+function buildMatchesFromRequests(
+  mine: MyRequest[],
+  allMatches: db.DbTutorMatch[],
+  allUsers: db.DbUser[],
+): TutorMatch[] {
+  const matches: TutorMatch[] = [];
+  for (const req of mine) {
+    if (req.status !== "accepted") continue;
+    // Find the match row by id (independent of which tutor accepted);
+    // fall back to the request's accepting tutor if the row is missing.
+    const match = allMatches.find((m) => m.id === req.id);
+    const tutorId = match?.tutor_id ?? req.acceptedByTutorId;
+    if (!tutorId) continue; // accepted but tutor unknown — skip
+    const tutor = allUsers.find((u) => u.id === tutorId);
+    const tutorName = tutor?.name ?? "Your Tutor";
+    matches.push({
+      id: req.id,
+      tutorId,
+      tutorName,
+      tutorAvatar: tutorName.split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase(),
+      subject: match?.subject ?? req.subject,
+      gradeLevel: match?.grade_level ?? req.gradeLevel,
+      helpMessage: req.helpMessage,
+      matchedAt: match?.matched_at ?? "recently",
+      // Each booked slot is one scheduled session.
+      sessionCount: match?.booked_slots?.length ?? 0,
+      nextSession: match?.next_session ?? null,
+      // Only the slots the tutor actually accepted (from the match row).
+      // Never fall back to the student's offered availability — those aren't booked.
+      bookedSlots: match?.booked_slots ?? [],
+      status: (match?.status ?? "ACTIVE") as MatchStatus,
+      unreadMessages: 0,
+    });
+  }
+  return matches;
+}
+
 /* ── Page ────────────────────────────────────────────── */
 export default function StudentDashboard() {
   const router = useRouter();
@@ -1047,10 +1103,19 @@ export default function StudentDashboard() {
   const [reportSubmitting, setReportSubmitting] = useState(false);
   const [reportDone, setReportDone] = useState(false);
   const [reportError, setReportError] = useState("");
+  const [classroomModName, setClassroomModName] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isLoading && !user) router.replace("/find");
     if (!isLoading && user && user.role !== "student") router.replace("/");
+    if (!isLoading && user) {
+      db.getStudentClassroom(user.id).then(async (entry) => {
+        if (!entry) return;
+        const mods = await db.getModerators();
+        const mod = mods.find((m) => m.id === entry.mod_id);
+        if (mod) setClassroomModName(mod.name);
+      }).catch(() => {});
+    }
   }, [user, isLoading, router]);
 
   useEffect(() => {
@@ -1087,32 +1152,8 @@ export default function StudentDashboard() {
         setMyRequests(mine);
 
         const allUsers = await db.getUsers();
-        const matches: TutorMatch[] = [];
-        for (const req of mine) {
-          if (req.status === "accepted" && req.acceptedByTutorId) {
-            const tutorMatchList = await db.getTutorMatches(req.acceptedByTutorId).catch(() => []);
-            const match = tutorMatchList.find((m) => m.id === req.id);
-            if (match) {
-              const tutor = allUsers.find((u) => u.id === req.acceptedByTutorId);
-              const tutorName = tutor?.name ?? "Your Tutor";
-              matches.push({
-                id: match.id,
-                tutorId: req.acceptedByTutorId,
-                tutorName,
-                tutorAvatar: tutorName.split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase(),
-                subject: match.subject ?? req.subject,
-                gradeLevel: match.grade_level ?? req.gradeLevel,
-                helpMessage: req.helpMessage,
-                matchedAt: match.matched_at ?? "recently",
-                sessionCount: match.session_count ?? 0,
-                nextSession: match.next_session ?? null,
-                bookedSlots: match.booked_slots ?? [],
-                status: (match.status ?? "ACTIVE") as MatchStatus,
-                unreadMessages: 0,
-              });
-            }
-          }
-        }
+        const allMatches = await db.getAllMatches().catch(() => []);
+        const matches = buildMatchesFromRequests(mine, allMatches, allUsers);
         setTutorMatches(matches);
 
         // Load messages — DB primary, localStorage fallback
@@ -1138,9 +1179,8 @@ export default function StudentDashboard() {
         // Load meet state from tutor_matches
         const initialMeet: Record<string, { active: boolean; gmeetUrl: string } | null> = {};
         for (const req of mine) {
-          if (req.status === "accepted" && req.acceptedByTutorId) {
-            const tMatches = await db.getTutorMatches(req.acceptedByTutorId).catch(() => []);
-            const tm = tMatches.find((m) => m.id === req.id);
+          if (req.status === "accepted") {
+            const tm = allMatches.find((m) => m.id === req.id);
             if (tm) {
               initialMeet[req.id] = tm.meet_active ? { active: true, gmeetUrl: tm.meet_url ?? "" } : null;
             }
@@ -1175,32 +1215,8 @@ export default function StudentDashboard() {
         setMyRequests(mine);
 
         const allUsers = await db.getUsers();
-        const matches: TutorMatch[] = [];
-        for (const req of mine) {
-          if (req.status === "accepted" && req.acceptedByTutorId) {
-            const tutorMatchList = await db.getTutorMatches(req.acceptedByTutorId).catch(() => []);
-            const match = tutorMatchList.find((m) => m.id === req.id);
-            if (match) {
-              const tutor = allUsers.find((u) => u.id === req.acceptedByTutorId);
-              const tutorName = tutor?.name ?? "Your Tutor";
-              matches.push({
-                id: match.id,
-                tutorId: req.acceptedByTutorId,
-                tutorName,
-                tutorAvatar: tutorName.split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase(),
-                subject: match.subject ?? req.subject,
-                gradeLevel: match.grade_level ?? req.gradeLevel,
-                helpMessage: req.helpMessage,
-                matchedAt: match.matched_at ?? "recently",
-                sessionCount: match.session_count ?? 0,
-                nextSession: match.next_session ?? null,
-                bookedSlots: match.booked_slots ?? [],
-                status: (match.status ?? "ACTIVE") as MatchStatus,
-                unreadMessages: 0,
-              });
-            }
-          }
-        }
+        const allMatches = await db.getAllMatches().catch(() => []);
+        const matches = buildMatchesFromRequests(mine, allMatches, allUsers);
         setTutorMatches(matches);
 
         // Refresh messages — DB primary, localStorage fallback
@@ -1227,13 +1243,10 @@ export default function StudentDashboard() {
         // Poll meet state from tutor_matches in DB
         const meetUpdates: { matchId: string; tutorName: string; active: boolean; gmeetUrl: string }[] = [];
         for (const m of matches) {
-          try {
-            const tMatches = await db.getTutorMatches(m.tutorId).catch(() => []);
-            const tm = tMatches.find((t) => t.id === m.id);
-            if (tm) {
-              meetUpdates.push({ matchId: m.id, tutorName: m.tutorName, active: tm.meet_active === true, gmeetUrl: tm.meet_url ?? "" });
-            }
-          } catch { /* ignore */ }
+          const tm = allMatches.find((t) => t.id === m.id);
+          if (tm) {
+            meetUpdates.push({ matchId: m.id, tutorName: m.tutorName, active: tm.meet_active === true, gmeetUrl: tm.meet_url ?? "" });
+          }
         }
         setMeetInvites((prev) => {
           const next = { ...prev };
@@ -1511,6 +1524,9 @@ export default function StudentDashboard() {
         );
       })()}
 
+      {/* Prompt existing accounts to fill any newly-added required fields */}
+      <ProfileCompletionGate userId={user.id} role="student" />
+
       <ProfilePanel
         isOpen={profileOpen}
         onClose={() => setProfileOpen(false)}
@@ -1520,6 +1536,7 @@ export default function StudentDashboard() {
         bioEditing={bioEditing}
         bioInput={bioInput}
         matches={tutorMatches}
+        classroomModName={classroomModName}
         onAvatarClick={() => avatarInputRef.current?.click()}
         setBioInput={setBioInput}
         setBioEditing={setBioEditing}
